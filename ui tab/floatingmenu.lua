@@ -1,89 +1,145 @@
 --[[
-    VergiHub Module: Floating Menu
-    Author: VergiAI
+    VergiHub - Floating Menu Button v1.0
+    Sürüklenebilir tetik butonu - menüyü açıp kapatır
+    Mobil ve PC uyumlu
 ]]
 
-local Float = {}
-local UserInputService = game:GetService("UserInputService")
+local Settings = getgenv().VergiHub
+local Theme = Settings.UI.Theme
+
+-- Servisler
 local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
 
-function Float:Init(Core)
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "VergiHub_Float"
-    pcall(function() ScreenGui.Parent = game:GetService("CoreGui") end)
-
-    local Button = Instance.new("TextButton")
-    Button.Name = "TriggerBtn"
-    Button.Size = UDim2.new(0, 50, 0, 50)
-    Button.Position = UDim2.new(0, 50, 0.5, -25) -- Sol Ortada Başla
-    Button.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    Button.Text = "V"
-    Button.Font = Enum.Font.GothamBlack
-    Button.TextSize = 24
-    Button.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Button.AutoButtonColor = false
-    Button.Parent = ScreenGui
-
-    -- Yuvarlaklık
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(1, 0)
-    Corner.Parent = Button
-
-    -- Beyaz Glow Efekti (Stroke)
-    local Stroke = Instance.new("UIStroke")
-    Stroke.Color = Color3.fromRGB(255, 255, 255)
-    Stroke.Thickness = 2
-    Stroke.Parent = Button
-
-    -- Tıklama Mantığı
-    Button.MouseButton1Click:Connect(function()
-        if Core.UI_MainFrame then
-            local Frame = Core.UI_MainFrame
-            Frame.Visible = not Frame.Visible
-            
-            -- Butona basınca ufak bir animasyon
-            TweenService:Create(Button, TweenInfo.new(0.1), {Rotation = Frame.Visible and 90 or 0}):Play()
-        else
-            warn("UI Main Frame bulunamadı! Lütfen scripti tekrar çalıştırın.")
-        end
-    end)
-
-    -- Sürükleme (Draggable) Mantığı
-    local Dragging, DragInput, DragStart, StartPos
-
-    Button.InputBegan:Connect(function(Input)
-        if Input.UserInputType == Enum.UserInputType.MouseButton1 or Input.UserInputType == Enum.UserInputType.Touch then
-            Dragging = true
-            DragStart = Input.Position
-            StartPos = Button.Position
-
-            Input.Changed:Connect(function()
-                if Input.UserInputState == Enum.UserInputState.End then
-                    Dragging = false
-                end
-            end)
-        end
-    end)
-
-    Button.InputChanged:Connect(function(Input)
-        if Input.UserInputType == Enum.UserInputType.MouseMovement or Input.UserInputType == Enum.UserInputType.Touch then
-            DragInput = Input
-        end
-    end)
-
-    UserInputService.InputChanged:Connect(function(Input)
-        if Input == DragInput and Dragging then
-            local Delta = Input.Position - DragStart
-            local Goal = UDim2.new(
-                StartPos.X.Scale, StartPos.X.Offset + Delta.X,
-                StartPos.Y.Scale, StartPos.Y.Offset + Delta.Y
-            )
-            -- Sürüklerken Tween kullanımı pürüzsüzlük sağlar
-            TweenService:Create(Button, TweenInfo.new(0.05), {Position = Goal}):Play()
-        end
-    end)
-    
-    print(":: Floating Menu Initialized ::")
+-- Eski varsa kaldır
+if game.CoreGui:FindFirstChild("VergiHubFloat") then
+    game.CoreGui:FindFirstChild("VergiHubFloat"):Destroy()
 end
 
-return Float
+-- ScreenGui
+local FloatGui = Instance.new("ScreenGui")
+FloatGui.Name = "VergiHubFloat"
+FloatGui.ResetOnSpawn = false
+FloatGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+FloatGui.Parent = game.CoreGui
+
+-- Ana buton
+local FloatButton = Instance.new("TextButton")
+FloatButton.Name = "FloatBtn"
+FloatButton.Size = UDim2.new(0, 50, 0, 50)
+FloatButton.Position = UDim2.new(0, 20, 0.5, -25)
+FloatButton.BackgroundColor3 = Theme.Primary
+FloatButton.Text = "🔮"
+FloatButton.TextSize = 22
+FloatButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+FloatButton.Font = Enum.Font.GothamBold
+FloatButton.BorderSizePixel = 0
+FloatButton.AutoButtonColor = false
+FloatButton.Parent = FloatGui
+
+-- Yuvarlak köşe
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(1, 0)
+btnCorner.Parent = FloatButton
+
+-- Parlama efekti
+local stroke = Instance.new("UIStroke")
+stroke.Color = Theme.Accent
+stroke.Thickness = 2
+stroke.Transparency = 0.3
+stroke.Parent = FloatButton
+
+-- Sürükleme sistemi
+local dragging = false
+local dragStart = nil
+local startPos = nil
+local hasMoved = false
+
+FloatButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true
+        hasMoved = false
+        dragStart = input.Position
+        startPos = FloatButton.Position
+        
+        -- Basılı tutma animasyonu
+        TweenService:Create(FloatButton, TweenInfo.new(0.15), {
+            Size = UDim2.new(0, 55, 0, 55),
+            BackgroundColor3 = Theme.Accent
+        }):Play()
+    end
+end)
+
+FloatButton.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false
+        
+        -- Bırakma animasyonu
+        TweenService:Create(FloatButton, TweenInfo.new(0.15), {
+            Size = UDim2.new(0, 50, 0, 50),
+            BackgroundColor3 = Theme.Primary
+        }):Play()
+        
+        -- Sürüklenmediyse tıklama olarak kabul et (menüyü aç/kapat)
+        if not hasMoved then
+            local mainUI = game.CoreGui:FindFirstChild("VergiHubUI")
+            if mainUI then
+                local mainFrame = mainUI:FindFirstChild("MainFrame")
+                if mainFrame then
+                    mainFrame.Visible = not mainFrame.Visible
+                    
+                    -- Tıklama geri bildirimi
+                    TweenService:Create(FloatButton, TweenInfo.new(0.1), {
+                        Size = UDim2.new(0, 45, 0, 45)
+                    }):Play()
+                    task.wait(0.1)
+                    TweenService:Create(FloatButton, TweenInfo.new(0.1), {
+                        Size = UDim2.new(0, 50, 0, 50)
+                    }):Play()
+                end
+            end
+        end
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        
+        -- 5 pikselden fazla hareket ettiyse sürükleme sayılır
+        if delta.Magnitude > 5 then
+            hasMoved = true
+        end
+        
+        FloatButton.Position = UDim2.new(
+            startPos.X.Scale,
+            startPos.X.Offset + delta.X,
+            startPos.Y.Scale,
+            startPos.Y.Offset + delta.Y
+        )
+    end
+end)
+
+-- Nefes alma animasyonu (idle durumunda)
+task.spawn(function()
+    while FloatButton and FloatButton.Parent do
+        if not dragging then
+            TweenService:Create(stroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+                Transparency = 0.7
+            }):Play()
+            task.wait(1.5)
+            
+            if not dragging and FloatButton and FloatButton.Parent then
+                TweenService:Create(stroke, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {
+                    Transparency = 0.2
+                }):Play()
+                task.wait(1.5)
+            end
+        else
+            task.wait(0.1)
+        end
+    end
+end)
+
+print("[VergiHub] 🟣 Floating Menu hazır!")
+return FloatButton
