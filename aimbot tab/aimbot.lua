@@ -1,7 +1,14 @@
 --[[
-    VergiHub - Aimbot Engine v2.1
-    Düzeltme: Tam lock sistemi - crosshair hedefe tam oturur
-    CFrame dominant yaklaşım, mousemoverel sadece destek
+    VergiHub - Aimbot Engine v3.0
+    
+    Yenilikler:
+    - Crosshair bazlı hedefleme (ekran merkezi)
+    - Hızlı ve doğal flick + micro-smooth
+    - Akıllı balistik hesaplama (mermi hızı, düşman hızı, yerçekimi)
+    - Mesafe bazlı dinamik smoothing
+    - Sub-pixel precision ile tam lock
+    
+    Smoothness: 1 = snap, 2-3 = hızlı flick (doğal), 4-6 = orta, 7+ = yavaş
 ]]
 
 local Settings = getgenv().VergiHub.Aimbot
@@ -19,7 +26,14 @@ local lockedTarget = nil
 local isAiming = false
 local fovCircle = nil
 
--- FOV dairesi
+-- Balistik sabitler
+local GRAVITY = Vector3.new(0, -196.2, 0) -- Roblox yerçekimi (workspace.Gravity)
+local DEFAULT_BULLET_SPEED = 1000          -- Varsayılan mermi hızı (stud/s)
+
+-- ==========================================
+-- FOV DAİRESİ
+-- ==========================================
+
 local function createFOVCircle()
     if fovCircle then pcall(function() fovCircle:Remove() end) end
     fovCircle = Drawing.new("Circle")
@@ -33,7 +47,168 @@ end
 
 fovCircle = createFOVCircle()
 
--- Geçerli hedef kontrolü
+-- ==========================================
+-- DÜŞMAN HIZ / İVME HESAPLAMA
+-- ==========================================
+
+-- Her oyuncu için velocity geçmişi (ivme tahmini için)
+local velocityHistory = {}
+local VELOCITY_SAMPLES = 8
+
+local function getSmoothedVelocity(player)
+    local char = player.Character
+    if not char then return Vector3.zero end
+
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return Vector3.zero end
+
+    local vel = hrp.AssemblyLinearVelocity
+    local key = player.UserId
+
+    -- Velocity geçmişi oluştur
+    if not velocityHistory[key] then
+        velocityHistory[key] = {}
+    end
+
+    local history = velocityHistory[key]
+    table.insert(history, {vel = vel, time = tick()})
+
+    -- Eski örnekleri temizle
+    while #history > VELOCITY_SAMPLES do
+        table.remove(history, 1)
+    end
+
+    -- Ağırlıklı ortalama (yeni örneklere daha fazla ağırlık)
+    if #history < 2 then return vel end
+
+    local weightedSum = Vector3.zero
+    local totalWeight = 0
+
+    for i, sample in ipairs(history) do
+        local weight = i / #history -- Son örnek en ağır
+        weightedSum = weightedSum + sample.vel * weight
+        totalWeight = totalWeight + weight
+    end
+
+    return weightedSum / totalWeight
+end
+
+-- İvme hesaplama (velocity değişim oranı)
+local function getAcceleration(player)
+    local key = player.UserId
+    local history = velocityHistory[key]
+
+    if not history or #history < 3 then return Vector3.zero end
+
+    local recent = history[#history]
+    local older = history[#history - 2]
+
+    local dt = recent.time - older.time
+    if dt <= 0 then return Vector3.zero end
+
+    return (recent.vel - older.vel) / dt
+end
+
+-- ==========================================
+-- BALİSTİK HESAPLAMA
+-- ==========================================
+--[[
+    Mermi düşüşü + hedef hareketi + yerçekimi hesabı.
+    
+    Problem: Mermi hedefe ulaşana kadar hedef hareket eder.
+    Çözüm: İteratif çözüm - merminin uçuş süresini hesapla,
+    o süre boyunca hedefin nereye gideceğini tahmin et.
+]]
+
+local function calculateBulletDrop(distance, bulletSpeed)
+    -- Merminin hedefe ulaşma süresi
+    local flightTime = distance / bulletSpeed
+
+    -- Yerçekimi düşüşü: d = 0.5 * g * t^2
+    local gravity = workspace.Gravity or 196.2
+    local drop = 0.5 * gravity * flightTime * flightTime
+
+    return drop, flightTime
+end
+
+-- Gelişmiş hedef pozisyon tahmini
+-- Mermi hızı, düşman velocity, ivme, yerçekimi hepsi hesaplanır
+local function predictTargetPosition(player, targetPartPos)
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then
+        return targetPartPos
+    end
+
+    local origin = Camera.CFrame.Position
+    local distance = (origin - targetPartPos).Magnitude
+
+    -- Prediction kapalıysa direkt pozisyon
+    if not Settings.Prediction then
+        return targetPartPos
+    end
+
+    -- Düşman velocity (ağırlıklı ortalama)
+    local enemyVel = getSmoothedVelocity(player)
+    local enemyAccel = getAcceleration(player)
+
+    -- Mermi hızı (oyundan algıla veya varsayılan kullan)
+    local bulletSpeed = DEFAULT_BULLET_SPEED
+
+    -- Silah tespiti (varsa)
+    local myTool = myChar:FindFirstChildOfClass("Tool")
+    if myTool then
+        -- Bazı oyunlarda silah hızı attribute olarak saklanır
+        local spd = myTool:GetAttribute("BulletSpeed") or myTool:GetAttribute("Speed")
+        if spd and type(spd) == "number" then
+            bulletSpeed = spd
+        end
+    end
+
+    -- İteratif çözüm: 3 iterasyon yeterli (yakınsama)
+    local predictedPos = targetPartPos
+    local flightTime = distance / bulletSpeed
+
+    for iteration = 1, 3 do
+        -- Hedefin tahminî pozisyonu (hareket + ivme)
+        -- x(t) = x0 + v*t + 0.5*a*t^2
+        local linearMove = enemyVel * flightTime * Settings.PredictionAmount
+        local accelMove = enemyAccel * 0.5 * flightTime * flightTime * Settings.PredictionAmount
+
+        -- Yatay hareket tahmini (Y ekseni ayrı - yerçekimi)
+        local horizontalPrediction = Vector3.new(
+            linearMove.X + accelMove.X,
+            0,
+            linearMove.Z + accelMove.Z
+        )
+
+        -- Dikey tahmin: düşman zıplıyorsa Y velocity'yi de hesapla
+        local verticalPrediction = 0
+        if math.abs(enemyVel.Y) > 5 then -- Zıplıyor veya düşüyor
+            verticalPrediction = enemyVel.Y * flightTime * Settings.PredictionAmount * 0.7
+        end
+
+        predictedPos = targetPartPos + horizontalPrediction + Vector3.new(0, verticalPrediction, 0)
+
+        -- Mermi düşüşü kompanzasyonu
+        local drop, newFlightTime = calculateBulletDrop(
+            (origin - predictedPos).Magnitude,
+            bulletSpeed
+        )
+
+        -- Düşüş kompanzasyonu: nişanı yukarı kaldır
+        predictedPos = predictedPos + Vector3.new(0, drop * 0.5, 0)
+
+        -- Yeni flight time ile tekrar hesapla
+        flightTime = newFlightTime
+    end
+
+    return predictedPos
+end
+
+-- ==========================================
+-- HEDEF DOĞRULAMA
+-- ==========================================
+
 local function isValidTarget(player)
     if player == LocalPlayer then return false end
 
@@ -81,32 +256,29 @@ local function isValidTarget(player)
     return true
 end
 
--- FOV mesafesi (ekran piksel)
-local function getFOVDistance(player)
-    local char = player.Character
-    if not char then return math.huge end
+-- ==========================================
+-- HEDEF SEÇİMİ (Crosshair bazlı)
+-- ==========================================
 
-    local part = char:FindFirstChild(Settings.TargetPart)
-    if not part then return math.huge end
-
-    local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
-    if not onScreen then return math.huge end
-
-    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    return (center - Vector2.new(pos.X, pos.Y)).Magnitude
-end
-
--- En yakın hedef
-local function getClosestTarget()
+-- Crosshair'e (ekran merkezine) en yakın hedefi seç
+local function getClosestToCrosshair()
     local best = nil
     local bestDist = Settings.FOVSize
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
-    for _, p in ipairs(Players:GetPlayers()) do
-        if isValidTarget(p) then
-            local d = getFOVDistance(p)
-            if d < bestDist then
-                bestDist = d
-                best = p
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isValidTarget(player) then
+            local char = player.Character
+            local part = char:FindFirstChild(Settings.TargetPart)
+            if part then
+                local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local screenDist = (screenCenter - Vector2.new(pos.X, pos.Y)).Magnitude
+                    if screenDist < bestDist then
+                        bestDist = screenDist
+                        best = player
+                    end
+                end
             end
         end
     end
@@ -114,85 +286,105 @@ local function getClosestTarget()
     return best
 end
 
--- Hedef pozisyon (prediction dahil)
-local function getTargetPosition(player)
-    local char = player.Character
-    if not char then return nil end
-
-    local part = char:FindFirstChild(Settings.TargetPart)
-    if not part then return nil end
-
-    local pos = part.Position
-
-    if Settings.Prediction then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local vel = hrp.AssemblyLinearVelocity
-            -- Sadece yatay velocity kullan (daha isabetli)
-            pos = pos + Vector3.new(vel.X, 0, vel.Z) * Settings.PredictionAmount
-        end
-    end
-
-    return pos
-end
-
--- =============================================
--- ANA AIM FONKSİYONU - TAM LOCK
--- =============================================
+-- ==========================================
+-- ANA AIM FONKSİYONU - CROSSHAIR BAZLI
+-- ==========================================
 --[[
-    Smoothness değerine göre 3 mod:
-    1 = Instant snap (CFrame direkt override)
-    2-4 = Hızlı lock (CFrame lerp yüksek alpha)
-    5+ = Yumuşak geçiş (CFrame lerp düşük alpha)
+    Mantık:
+    1. Hedef pozisyonunu dünya koordinatında hesapla (balistik dahil)
+    2. Hedefi ekran koordinatına çevir
+    3. Ekran merkezinden (crosshair) hedefe olan delta'yı bul
+    4. Delta'yı smoothness'a göre böl
+    5. CFrame.lookAt ile kamerayı döndür
     
-    Eski sorun: mousemoverel integer yuvarlama yüzünden 
-    küçük açılarda hedefe ulaşamıyordu.
-    Çözüm: Her durumda CFrame kullan, mousemoverel kaldırıldı.
+    Smoothness mapping (doğal hissiyat):
+    1     = tam snap (CFrame direkt)
+    2     = çok hızlı flick (alpha 0.85)
+    3     = hızlı flick (alpha 0.65) -- insanüstü ama doğal
+    4-5   = hızlı tracking (alpha 0.40-0.50)
+    6-8   = orta smooth (alpha 0.25-0.35)
+    9-12  = yavaş smooth (alpha 0.15-0.20)
+    13-20 = çok yavaş (alpha 0.05-0.12)
 ]]
 
-local function aimAtTarget(targetPos)
-    if not targetPos then return end
+local function calculateAlpha(smoothness)
+    -- Exponential decay curve: daha doğal hissiyat
+    -- smooth=1 -> 1.0, smooth=2 -> 0.85, smooth=3 -> 0.65
+    -- smooth=5 -> 0.45, smooth=10 -> 0.18, smooth=20 -> 0.06
+    local alpha = 1.7 / (smoothness ^ 0.75)
+    return math.clamp(alpha, 0.04, 1.0)
+end
+
+local function aimAtTarget(targetWorldPos)
+    if not targetWorldPos then return end
 
     Camera = workspace.CurrentCamera
     local camPos = Camera.CFrame.Position
     local smooth = math.clamp(Settings.Smoothness, 1, 20)
 
-    -- Hedef CFrame hesapla
-    local targetCF = CFrame.lookAt(camPos, targetPos)
+    -- Hedef CFrame
+    local targetCF = CFrame.lookAt(camPos, targetWorldPos)
 
     if smooth <= 1 then
-        -- SNAP: Anlık kilitleme, sıfır gecikme
+        -- SNAP: Anlık, sıfır gecikme
         Camera.CFrame = targetCF
-    else
-        -- LERP: Alpha değeri smoothness'a ters orantılı
-        -- smooth=2 -> alpha=0.65 (çok hızlı lock)
-        -- smooth=5 -> alpha=0.35 (orta)
-        -- smooth=10 -> alpha=0.18 (yavaş geçiş)
-        -- smooth=20 -> alpha=0.09 (çok yavaş)
-        local alpha = 1.3 / smooth
-        alpha = math.clamp(alpha, 0.05, 0.85)
-
-        Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
+        return
     end
+
+    -- Dinamik alpha hesapla
+    local alpha = calculateAlpha(smooth)
+
+    -- Mesafe bazlı alpha boost: yakın hedeflere daha hızlı lock
+    local screenPos, onScreen = Camera:WorldToViewportPoint(targetWorldPos)
+    if onScreen then
+        local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+        local pixelDist = (center - Vector2.new(screenPos.X, screenPos.Y)).Magnitude
+
+        -- Crosshair hedefe çok yakınsa (< 10px) tam lock
+        if pixelDist < 10 then
+            Camera.CFrame = targetCF
+            return
+        end
+
+        -- Hedefe yaklaştıkça alpha artır (hızlan)
+        if pixelDist < 50 then
+            alpha = alpha * 1.4
+        end
+
+        -- Çok uzaktaysa (> 200px) ilk flick hızlı olsun
+        if pixelDist > 200 then
+            alpha = math.max(alpha, 0.5)
+        end
+    end
+
+    alpha = math.clamp(alpha, 0.04, 1.0)
+
+    -- CFrame Lerp ile kamera döndür
+    Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
 end
 
--- Ana döngü
+-- ==========================================
+-- ANA DÖNGÜ
+-- ==========================================
+
 RunService.RenderStepped:Connect(function()
     Camera = workspace.CurrentCamera
 
-    -- FOV dairesi
+    -- FOV dairesi güncelle
     if fovCircle then
         fovCircle.Visible = Settings.Enabled and Settings.FOVEnabled
         fovCircle.Radius = Settings.FOVSize
         fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     end
 
+    -- Aimbot kapalıysa temizle
     if not Settings.Enabled then
         currentTarget = nil
         lockedTarget = nil
         return
     end
 
+    -- Aim tuşu kontrolü
     if not isAiming then
         if not Settings.StickyAim then
             currentTarget = nil
@@ -205,7 +397,7 @@ RunService.RenderStepped:Connect(function()
     if Settings.StickyAim and lockedTarget and isValidTarget(lockedTarget) then
         currentTarget = lockedTarget
     else
-        currentTarget = getClosestTarget()
+        currentTarget = getClosestToCrosshair()
         if Settings.StickyAim and currentTarget then
             lockedTarget = currentTarget
         end
@@ -213,12 +405,22 @@ RunService.RenderStepped:Connect(function()
 
     -- Aim uygula
     if currentTarget then
-        local pos = getTargetPosition(currentTarget)
-        aimAtTarget(pos)
+        local char = currentTarget.Character
+        if char then
+            local part = char:FindFirstChild(Settings.TargetPart)
+            if part then
+                -- Balistik tahminli pozisyon
+                local predictedPos = predictTargetPosition(currentTarget, part.Position)
+                aimAtTarget(predictedPos)
+            end
+        end
     end
 end)
 
--- Tuş girdileri
+-- ==========================================
+-- TUŞLAR
+-- ==========================================
+
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.UserInputType == Settings.AimKey or input.KeyCode == Settings.AimKey then
@@ -236,10 +438,20 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
+-- Oyuncu ayrılma
 Players.PlayerRemoving:Connect(function(player)
     if currentTarget == player then currentTarget = nil end
     if lockedTarget == player then lockedTarget = nil end
+    velocityHistory[player.UserId] = nil
 end)
 
-print("[VergiHub] Aimbot Engine v2.1 hazir!")
+-- Yerçekimi güncellemesi
+task.spawn(function()
+    while true do
+        GRAVITY = Vector3.new(0, -(workspace.Gravity or 196.2), 0)
+        task.wait(5)
+    end
+end)
+
+print("[VergiHub] Aimbot Engine v3.0 hazir!")
 return true
