@@ -1,161 +1,218 @@
 --[[
-    VergiHub Combat Module v5 (Ultimate)
-    Architecture: Vector-Based Prediction & Bezier Smoothing
-    Author: VergiAI
+    VergiHub - Aimbot Engine v1.0
+    Gelişmiş aimbot sistemi - hareket tahmini, FOV kontrolü, yumuşak geçiş
 ]]
 
-local Combat = {}
-local Core = nil
+local Settings = getgenv().VergiHub.Aimbot
 
--- // Services & Optimization
-local Services = {
-    Players = game:GetService("Players"),
-    RunService = game:GetService("RunService"),
-    UserInputService = game:GetService("UserInputService"),
-    Workspace = game:GetService("Workspace"),
-    GuiService = game:GetService("GuiService")
-}
+-- Servisler
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Camera = workspace.CurrentCamera
+local LocalPlayer = Players.LocalPlayer
 
-local LocalPlayer = Services.Players.LocalPlayer
-local Camera = Services.Workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
+-- Durum değişkenleri
+local currentTarget = nil    -- Şu anki hedef
+local isAiming = false       -- Aim tuşu basılı mı
+local fovCircle = nil        -- FOV dairesi çizimi
 
--- // Math Library (Performance)
-local Math = {
-    pi = math.pi,
-    huge = math.huge,
-    clamp = math.clamp,
-    rad = math.rad,
-    tan = math.tan,
-    random = math.random
-}
-
--- // State Management
-local State = {
-    Target = nil,
-    IsAiming = false,
-    LastShot = 0
-}
-
--- // Custom Physics: Bezier Curve Algorithm (Humanizer)
-local function GetBezierPoint(t, p0, p1, p2)
-    return (1 - t)^2 * p0 + 2 * (1 - t) * t * p1 + t^2 * p2
+-- FOV dairesi oluştur (Drawing API)
+local function createFOVCircle()
+    if fovCircle then fovCircle:Remove() end
+    fovCircle = Drawing.new("Circle")
+    fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    fovCircle.Radius = Settings.FOVSize
+    fovCircle.Color = Color3.fromRGB(138, 43, 226)
+    fovCircle.Thickness = 1.5
+    fovCircle.Filled = false
+    fovCircle.Transparency = 0.7
+    fovCircle.Visible = false
+    return fovCircle
 end
 
--- // Target Validation System
-local function IsValidTarget(Player)
-    if not Player or Player == LocalPlayer then return false end
+fovCircle = createFOVCircle()
+
+-- Oyuncu geçerli mi kontrol et
+local function isValidTarget(player)
+    -- Kendimizi hedefleme
+    if player == LocalPlayer then return false end
     
-    local Character = Player.Character
-    if not Character then return false end
+    -- Karakter var mı
+    local character = player.Character
+    if not character then return false end
     
-    local Humanoid = Character:FindFirstChild("Humanoid")
-    local RootPart = Character:FindFirstChild("HumanoidRootPart")
+    -- Humanoid ve can kontrolü
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid or humanoid.Health <= 0 then return false end
     
-    if not Humanoid or not RootPart then return false end
-    if Humanoid.Health <= 0 then return false end
+    -- Hedef vücut parçası var mı
+    local targetPart = character:FindFirstChild(Settings.TargetPart)
+    if not targetPart then return false end
     
-    -- Team Check (Critical)
-    if Core.Settings.Aimbot.TeamCheck and Player.Team == LocalPlayer.Team then
-        return false
+    -- Takım kontrolü
+    if Settings.TeamCheck then
+        if player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then
+            return false
+        end
     end
     
-    -- Wall Check (Raycasting v2)
-    if Core.Settings.Aimbot.WallCheck then
-        local Origin = Camera.CFrame.Position
-        local Direction = (RootPart.Position - Origin)
-        local Params = RaycastParams.new()
-        Params.FilterDescendantsInstances = {LocalPlayer.Character, Camera, Services.Workspace:FindFirstChild("Ignore")} -- Ignore folder support
-        Params.FilterType = Enum.RaycastFilterType.Exclude
-        Params.IgnoreWater = true
+    -- Mesafe kontrolü
+    local myChar = LocalPlayer.Character
+    if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return false end
+    
+    local distance = (myChar.HumanoidRootPart.Position - targetPart.Position).Magnitude
+    if distance > Settings.MaxDistance then return false end
+    
+    -- Görünürlük kontrolü (Raycast)
+    if Settings.VisibleCheck then
+        local rayParams = RaycastParams.new()
+        rayParams.FilterType = Enum.RaycastFilterType.Exclude
+        rayParams.FilterDescendantsInstances = {myChar, Camera}
         
-        local Result = Services.Workspace:Raycast(Origin, Direction, Params)
-        if Result and not Result.Instance:IsDescendantOf(Character) then
-            return false -- Obstructed
+        local origin = Camera.CFrame.Position
+        local direction = (targetPart.Position - origin).Unit * distance
+        local rayResult = workspace:Raycast(origin, direction, rayParams)
+        
+        if rayResult and not rayResult.Instance:IsDescendantOf(character) then
+            return false
         end
     end
     
     return true
 end
 
--- // Advanced Target Selector (Score Based)
-local function GetBestTarget()
-    local BestTarget = nil
-    local BestScore = Math.huge
-    local MousePos = Services.UserInputService:GetMouseLocation()
+-- Ekrandaki FOV mesafesini hesapla
+local function getFOVDistance(player)
+    local character = player.Character
+    if not character then return math.huge end
     
-    for _, Player in ipairs(Services.Players:GetPlayers()) do
-        if IsValidTarget(Player) then
-            local Part = Player.Character:FindFirstChild(Core.Settings.Aimbot.TargetPart or "Head")
-            if Part then
-                local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Part.Position)
-                if OnScreen then
-                    local DistToMouse = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
-                    local DistToPlayer = (LocalPlayer.Character.HumanoidRootPart.Position - Part.Position).Magnitude
-                    
-                    -- FOV Check
-                    if DistToMouse <= (Core.Settings.Aimbot.FOV or 150) then
-                        -- Score Calculation: (DistanceToMouse * Weight) + (DistanceToPlayer * Weight)
-                        -- Yakındaki ve mouse'a yakın olan öncelikli
-                        local Score = (DistToMouse * 0.7) + (DistToPlayer * 0.3)
-                        
-                        if Score < BestScore then
-                            BestScore = Score
-                            BestTarget = Part
-                        end
-                    end
-                end
+    local targetPart = character:FindFirstChild(Settings.TargetPart)
+    if not targetPart then return math.huge end
+    
+    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+    if not onScreen then return math.huge end
+    
+    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    local targetScreen = Vector2.new(screenPos.X, screenPos.Y)
+    
+    return (screenCenter - targetScreen).Magnitude
+end
+
+-- En yakın hedefi bul (FOV bazlı)
+local function getClosestTarget()
+    local closestPlayer = nil
+    local closestFOV = Settings.FOVSize -- FOV dışındakileri eleme
+    
+    for _, player in ipairs(Players:GetPlayers()) do
+        if isValidTarget(player) then
+            local fovDist = getFOVDistance(player)
+            if fovDist < closestFOV then
+                closestFOV = fovDist
+                closestPlayer = player
             end
         end
     end
     
-    return BestTarget
+    return closestPlayer
 end
 
--- // Prediction Engine
-local function PredictPosition(TargetPart)
-    local Velocity = TargetPart.Parent.HumanoidRootPart.Velocity
-    local Dist = (LocalPlayer.Character.HumanoidRootPart.Position - TargetPart.Position).Magnitude
+-- Hedef pozisyonunu hesapla (prediction dahil)
+local function getTargetPosition(player)
+    local character = player.Character
+    if not character then return nil end
     
-    -- Basit fizik: Mesafe arttıkça mermi düşmesi ve varış süresi artar (Ping telafisi)
-    local PredictionFactor = (Dist / 1000) + (Core.Settings.Aimbot.Prediction or 0.165)
+    local targetPart = character:FindFirstChild(Settings.TargetPart)
+    if not targetPart then return nil end
     
-    return TargetPart.Position + (Velocity * PredictionFactor)
-end
-
--- // Main Loop
-function Combat:Init(VergiHubCore)
-    Core = VergiHubCore
-    print(":: [Combat] System Initialized (VergiHub v5) ::")
+    local targetPos = targetPart.Position
     
-    Services.RunService.RenderStepped:Connect(function(Delta)
-        if not Core.Settings.Aimbot.Enabled then return end
-        
-        local IsKeyDown = Services.UserInputService:IsMouseButtonPressed(Core.Settings.Aimbot.Key or Enum.UserInputType.MouseButton2)
-        
-        if IsKeyDown then
-            State.IsAiming = true
-            local Target = GetBestTarget()
-            
-            if Target then
-                local PredictedPos = PredictPosition(Target)
-                local CurrentCF = Camera.CFrame
-                local GoalCF = CFrame.new(CurrentCF.Position, PredictedPos)
-                
-                -- Smoothing Logic
-                local Smoothness = Core.Settings.Aimbot.Smoothing or 0.5
-                -- Dynamic Smoothing: Hedef hareketliyse yumuşatmayı azalt (daha sıkı takip)
-                if Target.Parent.HumanoidRootPart.Velocity.Magnitude > 10 then
-                    Smoothness = Smoothness * 0.8
-                end
-                
-                Camera.CFrame = CurrentCF:Lerp(GoalCF, Smoothness)
-            end
-        else
-            State.IsAiming = false
-            State.Target = nil
+    -- Hareket tahmini (Prediction)
+    if Settings.Prediction then
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        if rootPart then
+            local velocity = rootPart.AssemblyLinearVelocity
+            targetPos = targetPos + (velocity * Settings.PredictionAmount)
         end
-    end)
+    end
+    
+    return targetPos
 end
 
-return Combat
+-- Aim uygulama (yumuşak geçiş ile)
+local function aimAt(targetPos)
+    if not targetPos then return end
+    
+    local smoothness = math.clamp(Settings.Smoothness, 1, 20)
+    local smoothFactor = 1 / smoothness
+    
+    -- Hedef CFrame hesapla
+    local currentCFrame = Camera.CFrame
+    local targetCFrame = CFrame.lookAt(currentCFrame.Position, targetPos)
+    
+    -- Yumuşak geçiş (Lerp)
+    Camera.CFrame = currentCFrame:Lerp(targetCFrame, smoothFactor)
+end
+
+-- Ana aimbot döngüsü (RenderStepped - her frame)
+RunService.RenderStepped:Connect(function()
+    -- FOV dairesi güncelleme
+    if fovCircle then
+        fovCircle.Visible = Settings.Enabled and Settings.FOVEnabled
+        fovCircle.Radius = Settings.FOVSize
+        fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    end
+    
+    -- Aimbot kapalıysa çık
+    if not Settings.Enabled then
+        currentTarget = nil
+        return
+    end
+    
+    -- Aim tuşu basılı değilse çık
+    if not isAiming then
+        if not Settings.StickyAim then
+            currentTarget = nil
+        end
+        return
+    end
+    
+    -- Hedef bul veya mevcut hedefi koru
+    if Settings.StickyAim and currentTarget and isValidTarget(currentTarget) then
+        -- Yapışkan aim: mevcut hedefi koru
+    else
+        currentTarget = getClosestTarget()
+    end
+    
+    -- Hedefe aim yap
+    if currentTarget then
+        local targetPos = getTargetPosition(currentTarget)
+        aimAt(targetPos)
+    end
+end)
+
+-- Tuş girdileri - Mouse butonları
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    
+    -- Aim tuşu kontrolü (varsayılan: sağ tık)
+    if input.UserInputType == Settings.AimKey or input.KeyCode == Settings.AimKey then
+        isAiming = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Settings.AimKey or input.KeyCode == Settings.AimKey then
+        isAiming = false
+    end
+end)
+
+-- Temizlik: oyuncu ayrıldığında hedefi sıfırla
+Players.PlayerRemoving:Connect(function(player)
+    if currentTarget == player then
+        currentTarget = nil
+    end
+end)
+
+print("[VergiHub] 🎯 Aimbot Engine hazır!")
+return true
