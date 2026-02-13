@@ -1,68 +1,64 @@
 --[[
-    VergiHub Kernel - Universal Build
+    VergiHub Kernel - Fix Build
     Author: Baran
 ]]
 
 local VergiHub = {
     Settings = {
         Aimbot = {
-            Enabled = true,
-            Key = Enum.UserInputType.MouseButton2, -- Sağ Tık
-            Smoothing = 0.2, -- 0.1 (Robotik) - 1.0 (Yavaş)
-            TeamCheck = true
+            Enabled = false, -- Default: KAPALI
+            Key = Enum.UserInputType.MouseButton2,
+            Smoothing = 0.5,
+            TeamCheck = false,
+            WallCheck = false
         },
         Visuals = {
-            Box = true,
-            Names = true,
-            Health = true
+            Box = false, -- Default: KAPALI
+            Names = false, -- Default: KAPALI
+            Health = false -- Default: KAPALI
         },
         UI = {
-            Open = false -- UI Başlangıç durumu
+            Open = false
         }
     },
+    -- Global UI Referansı (İletişim için)
+    UI_MainFrame = nil, 
+    
     BaseURL = "https://raw.githubusercontent.com/BaranBey1331/VergiHub/main/",
     Services = {
         Players = game:GetService("Players"),
         RunService = game:GetService("RunService"),
         UserInputService = game:GetService("UserInputService"),
-        TweenService = game:GetService("TweenService")
+        TweenService = game:GetService("TweenService"),
+        CoreGui = game:GetService("CoreGui")
     }
 }
 
 -- Global Erişim
 getgenv().VergiHub = VergiHub
 
--- Modül Import Fonksiyonu
 function VergiHub:Import(path)
     local url = self.BaseURL .. path
     local success, result = pcall(function() return game:HttpGet(url) end)
-    
-    if not success then 
-        warn(":: KRİTİK HATA :: Dosya yüklenemedi -> " .. path)
-        return nil 
-    end
-    
-    local func, loadErr = loadstring(result)
-    if not func then 
-        warn(":: SÖZDİZİMİ HATASI :: " .. path .. " -> " .. loadErr) 
-        return nil 
-    end
-    
+    if not success then return warn("HATA: " .. path) end
+    local func, err = loadstring(result)
+    if not func then return warn("SENTAKS: " .. err) end
     return func()
 end
 
 print(":: VergiHub Başlatılıyor ::")
 
--- 1. Görsel Modüller (ESP)
+-- Modülleri Sırayla Yükle (UI Önce)
+local UI = VergiHub:Import("ui%20tab/uimain.lua")
+if UI then UI:Init(VergiHub) end
+
+local Float = VergiHub:Import("ui%20tab/floatingmenu.lua")
+if Float then Float:Init(VergiHub) end
+
 local ESP = VergiHub:Import("aimbot%20tab/esp.lua")
 if ESP then task.spawn(function() ESP:Init(VergiHub) end) end
 
--- 2. Savaş Modülleri (Aimbot)
 local Aimbot = VergiHub:Import("aimbot%20tab/aimbot.lua")
 if Aimbot then task.spawn(function() Aimbot:Init(VergiHub) end) end
 
--- 3. Arayüz (Floating UI)
-local UI = VergiHub:Import("ui%20tab/floatingmenu.lua")
-if UI then UI:Init(VergiHub) end
-
-print(":: Sistem Hazır ::")
+print(":: Sistem Hazır (Tüm Özellikler Kapalı) ::")
