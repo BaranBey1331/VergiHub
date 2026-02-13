@@ -2,41 +2,32 @@
     VergiHub - UI Dashboard v2.0
     Modern dark palette, emoji-free, clean typography
     Tab sistemi, toggle/slider/dropdown kontrolleri
+    
+    Tablar: Aimbot, ESP, HardLock, Bypass, Settings
 ]]
 
 local Settings = getgenv().VergiHub
 
--- Yeni palette'i Theme'e yaz (diğer modüller de kullansın)
+-- Yeni palette'i Theme'e yaz
 Settings.UI.Theme = {
-    -- Ana arka planlar
     Background    = Color3.fromRGB(13, 14, 22),
     Surface       = Color3.fromRGB(21, 23, 34),
     Surface2      = Color3.fromRGB(28, 31, 46),
     TopBar        = Color3.fromRGB(18, 19, 30),
-
-    -- Vurgu renkleri
     Primary       = Color3.fromRGB(124, 58, 237),
     Accent        = Color3.fromRGB(167, 139, 250),
     AccentGlow    = Color3.fromRGB(196, 181, 253),
-
-    -- Durum renkleri
     Success       = Color3.fromRGB(52, 211, 153),
     Error         = Color3.fromRGB(248, 113, 113),
     Warning       = Color3.fromRGB(251, 191, 36),
-
-    -- Yazı renkleri
     Text          = Color3.fromRGB(226, 232, 240),
     TextDim       = Color3.fromRGB(148, 163, 184),
     TextMuted     = Color3.fromRGB(100, 116, 139),
-
-    -- Kontrol elemanları
     ToggleOn      = Color3.fromRGB(124, 58, 237),
     ToggleOff     = Color3.fromRGB(51, 65, 85),
     SliderFill    = Color3.fromRGB(124, 58, 237),
     SliderTrack   = Color3.fromRGB(30, 41, 59),
     Border        = Color3.fromRGB(30, 41, 59),
-
-    -- Tab renkleri
     TabActive     = Color3.fromRGB(124, 58, 237),
     TabInactive   = Color3.fromRGB(28, 31, 46),
 }
@@ -191,7 +182,7 @@ local ufCorner = Instance.new("UICorner")
 ufCorner.CornerRadius = UDim.new(0, 6)
 ufCorner.Parent = userFrame
 
--- Kullanıcı avatar dairesi
+-- Kullanıcı durumu dairesi
 local userDot = Instance.new("Frame")
 userDot.Size = UDim2.new(0, 8, 0, 8)
 userDot.Position = UDim2.new(0, 8, 0.5, -4)
@@ -348,11 +339,13 @@ local tabs = {}
 local tabPages = {}
 local currentTab = nil
 
--- Tab ikonları (Unicode semboller - emoji değil)
+-- Tab ikonları (Unicode - emoji değil)
 local TAB_ICONS = {
-    Aimbot = "◎",     -- Hedef
-    ESP = "◈",         -- Göz/kristal
-    Settings = "⚙",   -- Dişli (bu tek unicode emoji ama evrensel)
+    Aimbot   = "◎",
+    ESP      = "◈",
+    HardLock = "⊕",
+    Bypass   = "◆",
+    Settings = "⚙",
 }
 
 local function createTab(name, icon)
@@ -377,7 +370,7 @@ local function createTab(name, icon)
     activeBar.Size = UDim2.new(0, 3, 0.6, 0)
     activeBar.Position = UDim2.new(0, 0, 0.2, 0)
     activeBar.BackgroundColor3 = Theme.Primary
-    activeBar.BackgroundTransparency = 1 -- Başta gizli
+    activeBar.BackgroundTransparency = 1
     activeBar.BorderSizePixel = 0
     activeBar.Parent = tabBtn
 
@@ -476,7 +469,6 @@ local function createSection(parent, title)
     holder.BackgroundTransparency = 1
     holder.Parent = parent
 
-    -- Sol çizgi
     local leftLine = Instance.new("Frame")
     leftLine.Size = UDim2.new(0, 16, 0, 1)
     leftLine.Position = UDim2.new(0, 0, 0.5, 0)
@@ -484,7 +476,6 @@ local function createSection(parent, title)
     leftLine.BorderSizePixel = 0
     leftLine.Parent = holder
 
-    -- Başlık
     local label = Instance.new("TextLabel")
     label.Text = string.upper(title)
     label.Size = UDim2.new(1, -24, 1, 0)
@@ -676,7 +667,7 @@ local function createSlider(parent, label, min, max, default, callback)
     fillCorner.CornerRadius = UDim.new(1, 0)
     fillCorner.Parent = sliderFill
 
-    -- Slider knob (tutma noktası)
+    -- Slider knob
     local knob = Instance.new("Frame")
     knob.Size = UDim2.new(0, 14, 0, 14)
     knob.Position = UDim2.new(math.clamp(percent, 0, 1), -7, 0.5, -7)
@@ -708,15 +699,13 @@ local function createSlider(parent, label, min, max, default, callback)
     sliderBtn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             sliding = true
-            -- Knob büyütme
-            tween(knob, {Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(knob.Position.X.Scale, -9, 0.5, -9)}, 0.1)
+            tween(knob, {Size = UDim2.new(0, 18, 0, 18)}, 0.1)
         end
     end)
 
     sliderBtn.InputEnded:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             sliding = false
-            -- Knob küçültme
             local currentScale = sliderFill.Size.X.Scale
             tween(knob, {Size = UDim2.new(0, 14, 0, 14), Position = UDim2.new(currentScale, -7, 0.5, -7)}, 0.1)
         end
@@ -742,10 +731,9 @@ end
 -- Dropdown
 local function createDropdown(parent, label, options, default, callback)
     local isOpen = false
-    local totalHeight = 38
 
     local holder = Instance.new("Frame")
-    holder.Size = UDim2.new(1, 0, 0, totalHeight)
+    holder.Size = UDim2.new(1, 0, 0, 38)
     holder.BackgroundColor3 = Theme.Surface
     holder.BorderSizePixel = 0
     holder.ClipsDescendants = true
@@ -804,7 +792,6 @@ local function createDropdown(parent, label, options, default, callback)
         optCorner.CornerRadius = UDim.new(0, 5)
         optCorner.Parent = optBtn
 
-        -- Hover
         optBtn.MouseEnter:Connect(function()
             tween(optBtn, {BackgroundColor3 = Theme.Primary, TextColor3 = Theme.Text}, 0.12)
         end)
@@ -848,10 +835,9 @@ local function createDropdown(parent, label, options, default, callback)
 end
 
 -- ==========================================
--- TAB İÇERİKLERİ
+-- TAB 1: AIMBOT
 -- ==========================================
 
--- === AIMBOT ===
 local aimbotPage = createTab("Aimbot", TAB_ICONS.Aimbot)
 
 createSection(aimbotPage, "General")
@@ -896,7 +882,7 @@ createToggle(aimbotPage, "Movement Prediction", false, function(s)
     Settings.Aimbot.Prediction = s
 end)
 
-createSlider(aimbotPage, "Prediction Amount (×1000)", 50, 500, 165, function(v)
+createSlider(aimbotPage, "Prediction Amount (x1000)", 50, 500, 165, function(v)
     Settings.Aimbot.PredictionAmount = v / 1000
 end)
 
@@ -904,7 +890,10 @@ createDropdown(aimbotPage, "Target Part", {"Head", "HumanoidRootPart", "UpperTor
     Settings.Aimbot.TargetPart = v
 end)
 
--- === ESP ===
+-- ==========================================
+-- TAB 2: ESP
+-- ==========================================
+
 local espPage = createTab("ESP", TAB_ICONS.ESP)
 
 createSection(espPage, "General")
@@ -957,7 +946,7 @@ createToggle(espPage, "Chams / Highlight", false, function(s)
     Settings.ESP.Chams = s
 end)
 
-createSlider(espPage, "Chams Opacity (×100)", 0, 100, 50, function(v)
+createSlider(espPage, "Chams Opacity (x100)", 0, 100, 50, function(v)
     Settings.ESP.ChamsTransparency = v / 100
 end)
 
@@ -965,7 +954,249 @@ createSlider(espPage, "Max ESP Distance", 100, 3000, 1000, function(v)
     Settings.ESP.MaxDistance = v
 end)
 
--- === SETTINGS ===
+-- ==========================================
+-- TAB 3: HARDLOCK
+-- ==========================================
+
+local hardlockPage = createTab("HardLock", TAB_ICONS.HardLock)
+
+createSection(hardlockPage, "General")
+
+createToggle(hardlockPage, "HardLock", false, function(s)
+    Settings.HardLock.Enabled = s
+end)
+
+createToggle(hardlockPage, "Lock Indicator", false, function(s)
+    Settings.HardLock.Indicator = s
+end)
+
+createToggle(hardlockPage, "Override Target Part", false, function(s)
+    Settings.HardLock.OverrideTarget = s
+end)
+
+createSection(hardlockPage, "Lock Mode")
+
+createDropdown(hardlockPage, "Mode", {"Snap", "Flick", "Rage", "Silent"}, "Snap", function(v)
+    Settings.HardLock.Mode = v
+end)
+
+createDropdown(hardlockPage, "Target Part", {"Head", "HumanoidRootPart", "UpperTorso"}, "Head", function(v)
+    Settings.HardLock.TargetPart = v
+end)
+
+createSection(hardlockPage, "Flick Settings")
+
+createSlider(hardlockPage, "Flick Speed (ms)", 20, 200, 80, function(v)
+    Settings.HardLock.FlickSpeed = v / 1000
+end)
+
+createSlider(hardlockPage, "Flick Return Speed (%)", 10, 80, 30, function(v)
+    Settings.HardLock.FlickReturn = v / 100
+end)
+
+createSection(hardlockPage, "Rage Settings")
+
+createToggle(hardlockPage, "Auto Fire", false, function(s)
+    Settings.HardLock.AutoFire = s
+end)
+
+createSlider(hardlockPage, "Rage Prediction (x1000)", 50, 400, 200, function(v)
+    Settings.HardLock.RagePrediction = v / 1000
+end)
+
+-- Mode bilgi kartı
+createSection(hardlockPage, "Mode Info")
+
+local modeInfoCard = Instance.new("Frame")
+modeInfoCard.Size = UDim2.new(1, 0, 0, 108)
+modeInfoCard.BackgroundColor3 = Theme.Surface
+modeInfoCard.BorderSizePixel = 0
+modeInfoCard.Parent = hardlockPage
+
+local miCorner = Instance.new("UICorner")
+miCorner.CornerRadius = UDim.new(0, 8)
+miCorner.Parent = modeInfoCard
+
+local modeLines = {
+    {label = "Snap", desc = "Instant lock, release to free aim", color = Theme.Success},
+    {label = "Flick", desc = "Fast flick then smooth tracking", color = Theme.Warning},
+    {label = "Rage", desc = "Full override every frame, auto-fire", color = Theme.Error},
+    {label = "Silent", desc = "Camera stays, server gets aim angle", color = Theme.Accent},
+}
+
+for i, info in ipairs(modeLines) do
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -20, 0, 22)
+    row.Position = UDim2.new(0, 10, 0, 6 + (i - 1) * 25)
+    row.BackgroundTransparency = 1
+    row.Parent = modeInfoCard
+
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 6, 0, 6)
+    dot.Position = UDim2.new(0, 0, 0.5, -3)
+    dot.BackgroundColor3 = info.color
+    dot.BorderSizePixel = 0
+    dot.Parent = row
+
+    local dc = Instance.new("UICorner")
+    dc.CornerRadius = UDim.new(1, 0)
+    dc.Parent = dot
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Text = info.label
+    lbl.Size = UDim2.new(0, 45, 1, 0)
+    lbl.Position = UDim2.new(0, 12, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = info.color
+    lbl.TextSize = 11
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = row
+
+    local desc = Instance.new("TextLabel")
+    desc.Text = info.desc
+    desc.Size = UDim2.new(1, -65, 1, 0)
+    desc.Position = UDim2.new(0, 62, 0, 0)
+    desc.BackgroundTransparency = 1
+    desc.TextColor3 = Theme.TextDim
+    desc.TextSize = 10
+    desc.Font = Enum.Font.Gotham
+    desc.TextXAlignment = Enum.TextXAlignment.Left
+    desc.Parent = row
+end
+
+-- ==========================================
+-- TAB 4: BYPASS
+-- ==========================================
+
+local bypassPage = createTab("Bypass", TAB_ICONS.Bypass)
+
+createSection(bypassPage, "Protection Layers")
+
+createToggle(bypassPage, "Ring 1 — Byfron / Hyperion", false, function(s)
+    Settings.Bypass.Ring1 = s
+end)
+
+createToggle(bypassPage, "Ring 2 — Anti-Cheat Systems", false, function(s)
+    Settings.Bypass.Ring2 = s
+end)
+
+createToggle(bypassPage, "Ring 3 — ESP / Aimbot Stealth", false, function(s)
+    Settings.Bypass.Ring3 = s
+end)
+
+createToggle(bypassPage, "Ring 4 — Basic Protection", false, function(s)
+    Settings.Bypass.Ring4 = s
+end)
+
+-- Bypass bilgi kartı
+createSection(bypassPage, "Layer Info")
+
+local bypassInfoCard = Instance.new("Frame")
+bypassInfoCard.Size = UDim2.new(1, 0, 0, 120)
+bypassInfoCard.BackgroundColor3 = Theme.Surface
+bypassInfoCard.BorderSizePixel = 0
+bypassInfoCard.Parent = bypassPage
+
+local biCorner2 = Instance.new("UICorner")
+biCorner2.CornerRadius = UDim.new(0, 8)
+biCorner2.Parent = bypassInfoCard
+
+local bypassLines = {
+    {label = "Ring 1", desc = "Byfron memory scan, heartbeat, environment", color = Theme.Error},
+    {label = "Ring 2", desc = "Remote throttle, camera guard, input humanize", color = Theme.Warning},
+    {label = "Ring 3", desc = "Aim noise, drawing stealth, raycast budget", color = Theme.Accent},
+    {label = "Ring 4", desc = "Speed guard, teleport, FPS stable, anti-idle", color = Theme.Success},
+}
+
+for i, info in ipairs(bypassLines) do
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, -20, 0, 24)
+    row.Position = UDim2.new(0, 10, 0, 6 + (i - 1) * 28)
+    row.BackgroundTransparency = 1
+    row.Parent = bypassInfoCard
+
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 6, 0, 6)
+    dot.Position = UDim2.new(0, 0, 0.5, -3)
+    dot.BackgroundColor3 = info.color
+    dot.BorderSizePixel = 0
+    dot.Parent = row
+
+    local dc = Instance.new("UICorner")
+    dc.CornerRadius = UDim.new(1, 0)
+    dc.Parent = dot
+
+    local lbl = Instance.new("TextLabel")
+    lbl.Text = info.label
+    lbl.Size = UDim2.new(0, 45, 1, 0)
+    lbl.Position = UDim2.new(0, 12, 0, 0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = info.color
+    lbl.TextSize = 11
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = row
+
+    local desc = Instance.new("TextLabel")
+    desc.Text = info.desc
+    desc.Size = UDim2.new(1, -65, 1, 0)
+    desc.Position = UDim2.new(0, 62, 0, 0)
+    desc.BackgroundTransparency = 1
+    desc.TextColor3 = Theme.TextDim
+    desc.TextSize = 10
+    desc.Font = Enum.Font.Gotham
+    desc.TextXAlignment = Enum.TextXAlignment.Left
+    desc.Parent = row
+end
+
+-- Risk uyarısı
+createSection(bypassPage, "Notice")
+
+local warningCard = Instance.new("Frame")
+warningCard.Size = UDim2.new(1, 0, 0, 50)
+warningCard.BackgroundColor3 = Color3.fromRGB(28, 22, 10)
+warningCard.BorderSizePixel = 0
+warningCard.Parent = bypassPage
+
+local wcCorner = Instance.new("UICorner")
+wcCorner.CornerRadius = UDim.new(0, 8)
+wcCorner.Parent = warningCard
+
+local wcStroke = Instance.new("UIStroke")
+wcStroke.Color = Theme.Warning
+wcStroke.Thickness = 1
+wcStroke.Transparency = 0.7
+wcStroke.Parent = warningCard
+
+local warningDot = Instance.new("Frame")
+warningDot.Size = UDim2.new(0, 3, 1, -12)
+warningDot.Position = UDim2.new(0, 5, 0, 6)
+warningDot.BackgroundColor3 = Theme.Warning
+warningDot.BorderSizePixel = 0
+warningDot.Parent = warningCard
+
+local wdCorner = Instance.new("UICorner")
+wdCorner.CornerRadius = UDim.new(0, 2)
+wdCorner.Parent = warningDot
+
+local warningText = Instance.new("TextLabel")
+warningText.Text = "Higher rings provide more protection but may impact performance. Enable only what you need. Ring 1 requires compatible executor."
+warningText.Size = UDim2.new(1, -24, 1, -8)
+warningText.Position = UDim2.new(0, 16, 0, 4)
+warningText.BackgroundTransparency = 1
+warningText.TextColor3 = Color3.fromRGB(220, 200, 150)
+warningText.TextSize = 11
+warningText.Font = Enum.Font.Gotham
+warningText.TextWrapped = true
+warningText.TextXAlignment = Enum.TextXAlignment.Left
+warningText.TextYAlignment = Enum.TextYAlignment.Top
+warningText.Parent = warningCard
+
+-- ==========================================
+-- TAB 5: SETTINGS
+-- ==========================================
+
 local settingsPage = createTab("Settings", TAB_ICONS.Settings)
 
 createSection(settingsPage, "Information")
@@ -1023,7 +1254,47 @@ for i, info in ipairs(infoLines) do
     val.Parent = row
 end
 
--- İlk tab'ı aktif et
+-- Kredi kartı
+createSection(settingsPage, "Credits")
+
+local creditCard = Instance.new("Frame")
+creditCard.Size = UDim2.new(1, 0, 0, 48)
+creditCard.BackgroundColor3 = Theme.Surface
+creditCard.BorderSizePixel = 0
+creditCard.Parent = settingsPage
+
+local ccCorner = Instance.new("UICorner")
+ccCorner.CornerRadius = UDim.new(0, 8)
+ccCorner.Parent = creditCard
+
+local creditDot = Instance.new("Frame")
+creditDot.Size = UDim2.new(0, 3, 1, -12)
+creditDot.Position = UDim2.new(0, 5, 0, 6)
+creditDot.BackgroundColor3 = Theme.Primary
+creditDot.BorderSizePixel = 0
+creditDot.Parent = creditCard
+
+local cdCorner = Instance.new("UICorner")
+cdCorner.CornerRadius = UDim.new(0, 2)
+cdCorner.Parent = creditDot
+
+local creditText = Instance.new("TextLabel")
+creditText.Text = "Developed by Baran\nVergiHub — Private Use Only"
+creditText.Size = UDim2.new(1, -24, 1, -8)
+creditText.Position = UDim2.new(0, 16, 0, 4)
+creditText.BackgroundTransparency = 1
+creditText.TextColor3 = Theme.TextDim
+creditText.TextSize = 12
+creditText.Font = Enum.Font.Gotham
+creditText.TextWrapped = true
+creditText.TextXAlignment = Enum.TextXAlignment.Left
+creditText.TextYAlignment = Enum.TextYAlignment.Top
+creditText.Parent = creditCard
+
+-- ==========================================
+-- İLK TAB'I AKTİF ET
+-- ==========================================
+
 local firstTab = tabs["Aimbot"]
 firstTab.Button.BackgroundTransparency = 0.3
 firstTab.Button.BackgroundColor3 = Theme.Surface2
@@ -1033,7 +1304,10 @@ firstTab.Name.TextColor3 = Theme.Text
 tabPages["Aimbot"].Visible = true
 currentTab = "Aimbot"
 
--- Menü toggle tuşu
+-- ==========================================
+-- MENÜ TOGGLE TUŞU
+-- ==========================================
+
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
     if input.KeyCode == Settings.UI.ToggleKey then
