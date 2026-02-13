@@ -1,172 +1,223 @@
-local UILibrary = {}
+--[[
+    VergiHub UI - Premium Black Edition
+    Author: VergiAI
+]]
 
-function UILibrary:Init(Core)
-    local Services = Core.Services
-    
-    -- Eski GUI temizle
-    if Services.CoreGui:FindFirstChild("VergiHub_Main") then
-        Services.CoreGui.VergiHub_Main:Destroy()
+local UI = {}
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+function UI:Init(Core)
+    -- Temizlik
+    if CoreGui:FindFirstChild("VergiHub_MainUI") then
+        CoreGui.VergiHub_MainUI:Destroy()
     end
 
     local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "VergiHub_Main"
-    pcall(function() ScreenGui.Parent = Services.CoreGui end)
+    ScreenGui.Name = "VergiHub_MainUI"
+    pcall(function() ScreenGui.Parent = CoreGui end)
 
-    -- Ana Çerçeve (Gizli Başlar)
+    -- 1. Ana Panel (Main Frame)
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
-    MainFrame.Size = UDim2.new(0, 550, 0, 350)
-    MainFrame.Position = UDim2.new(0.5, -275, 0.5, -175)
-    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20) -- Koyu Gri/Siyah
+    MainFrame.Size = UDim2.new(0, 600, 0, 380)
+    MainFrame.Position = UDim2.new(0.5, -300, 0.5, -190)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 18) -- Derin Siyah
     MainFrame.BorderSizePixel = 0
-    MainFrame.Visible = false -- BAŞLANGIÇTA GİZLİ
+    MainFrame.Visible = false -- !! GİZLİ BAŞLAR !!
     MainFrame.Parent = ScreenGui
 
-    -- !! KRİTİK: Global referansa ata !!
+    -- Global'e Kayıt (Floating Menu için hayati önem taşır)
     Core.UI_MainFrame = MainFrame
 
-    -- Köşeler
     local MainCorner = Instance.new("UICorner")
-    MainCorner.CornerRadius = UDim.new(0, 10)
+    MainCorner.CornerRadius = UDim.new(0, 8)
     MainCorner.Parent = MainFrame
 
-    -- Yan Menü (Sidebar)
+    -- Aksan Çizgisi (Üst)
+    local TopLine = Instance.new("Frame")
+    TopLine.Size = UDim2.new(1, 0, 0, 2)
+    TopLine.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    TopLine.BorderSizePixel = 0
+    TopLine.Parent = MainFrame
+    local LineCorner = Instance.new("UICorner")
+    LineCorner.Parent = TopLine
+
+    -- 2. Sidebar (Sol Menü)
     local Sidebar = Instance.new("Frame")
-    Sidebar.Size = UDim2.new(0, 130, 1, 0)
-    Sidebar.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+    Sidebar.Size = UDim2.new(0, 150, 1, -2)
+    Sidebar.Position = UDim2.new(0, 0, 0, 2)
+    Sidebar.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
     Sidebar.BorderSizePixel = 0
     Sidebar.Parent = MainFrame
-    
+
     local SideCorner = Instance.new("UICorner")
-    SideCorner.CornerRadius = UDim.new(0, 10)
+    SideCorner.CornerRadius = UDim.new(0, 8)
     SideCorner.Parent = Sidebar
+    
+    -- Köşe Düzeltici (Sidebar'ın sağ tarafını düzleştirir)
+    local FixPatch = Instance.new("Frame")
+    FixPatch.Size = UDim2.new(0, 10, 1, 0)
+    FixPatch.Position = UDim2.new(1, -10, 0, 0)
+    FixPatch.BackgroundColor3 = Sidebar.BackgroundColor3
+    FixPatch.BorderSizePixel = 0
+    FixPatch.Parent = Sidebar
 
-    -- Başlık
-    local Title = Instance.new("TextLabel")
-    Title.Text = "VERGIHUB"
-    Title.Font = Enum.Font.GothamBlack
-    Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.TextSize = 18
-    Title.Size = UDim2.new(1, 0, 0, 50)
-    Title.BackgroundTransparency = 1
-    Title.Parent = Sidebar
+    -- Logo
+    local Logo = Instance.new("TextLabel")
+    Logo.Text = "VERGI<b>HUB</b>"
+    Logo.RichText = true
+    Logo.Size = UDim2.new(1, 0, 0, 50)
+    Logo.BackgroundTransparency = 1
+    Logo.TextColor3 = Color3.fromRGB(255, 255, 255)
+    Logo.Font = Enum.Font.GothamBold
+    Logo.TextSize = 20
+    Logo.Parent = Sidebar
 
-    -- Sayfa Konteyner (Pages)
+    -- 3. Sayfa Alanı (Content)
     local PageContainer = Instance.new("Frame")
-    PageContainer.Size = UDim2.new(1, -140, 1, -20)
-    PageContainer.Position = UDim2.new(0, 140, 0, 10)
+    PageContainer.Name = "Pages"
+    PageContainer.Size = UDim2.new(1, -160, 1, -20)
+    PageContainer.Position = UDim2.new(0, 160, 0, 10)
     PageContainer.BackgroundTransparency = 1
     PageContainer.Parent = MainFrame
 
-    -- Tab Butonları Konteyner
-    local TabContainer = Instance.new("UIListLayout")
-    TabContainer.Parent = Sidebar
-    TabContainer.SortOrder = Enum.SortOrder.LayoutOrder
-    TabContainer.Padding = UDim.new(0, 5)
-    TabContainer.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    
-    local TabPadding = Instance.new("UIPadding")
-    TabPadding.PaddingTop = UDim.new(0, 60)
-    TabPadding.Parent = Sidebar
+    -- Tab Yöneticisi
+    local TabList = Instance.new("UIListLayout")
+    TabList.Parent = Sidebar
+    TabList.SortOrder = Enum.SortOrder.LayoutOrder
+    TabList.Padding = UDim.new(0, 5)
+    TabList.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
-    local CurrentPage = nil
+    local TabPad = Instance.new("UIPadding")
+    TabPad.PaddingTop = UDim.new(0, 60)
+    TabPad.Parent = Sidebar
+
+    local ActivePage = nil
 
     local function CreateTab(Name)
-        -- Tab Butonu
+        -- Buton
         local TabBtn = Instance.new("TextButton")
-        TabBtn.Size = UDim2.new(0.8, 0, 0, 30)
-        TabBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
         TabBtn.Text = Name
-        TabBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-        TabBtn.Font = Enum.Font.GothamBold
-        TabBtn.TextSize = 12
+        TabBtn.Size = UDim2.new(0.85, 0, 0, 32)
+        TabBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+        TabBtn.TextColor3 = Color3.fromRGB(150, 150, 150)
+        TabBtn.Font = Enum.Font.GothamMedium
+        TabBtn.TextSize = 13
         TabBtn.Parent = Sidebar
         
-        local BtnCorner = Instance.new("UICorner")
-        BtnCorner.CornerRadius = UDim.new(0, 6)
-        BtnCorner.Parent = TabBtn
+        local TCorner = Instance.new("UICorner")
+        TCorner.CornerRadius = UDim.new(0, 6)
+        TCorner.Parent = TabBtn
 
         -- Sayfa
         local Page = Instance.new("ScrollingFrame")
+        Page.Name = Name
         Page.Size = UDim2.new(1, 0, 1, 0)
         Page.BackgroundTransparency = 1
         Page.ScrollBarThickness = 2
+        Page.ScrollBarImageColor3 = Color3.fromRGB(50, 50, 50)
         Page.Visible = false
         Page.Parent = PageContainer
-        
-        local PageLayout = Instance.new("UIListLayout")
-        PageLayout.Parent = Page
-        PageLayout.Padding = UDim.new(0, 5)
-        PageLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-        -- Tab Geçiş Mantığı
+        local PLayout = Instance.new("UIListLayout")
+        PLayout.Parent = Page
+        PLayout.Padding = UDim.new(0, 8)
+        PLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+        -- Tıklama Olayı
         TabBtn.MouseButton1Click:Connect(function()
-            if CurrentPage then CurrentPage.Visible = false end
+            if ActivePage then ActivePage.Visible = false end
             Page.Visible = true
-            CurrentPage = Page
+            ActivePage = Page
+            
+            -- Görsel Feedback
+            for _, btn in pairs(Sidebar:GetChildren()) do
+                if btn:IsA("TextButton") then
+                    TweenService:Create(btn, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(150, 150, 150), BackgroundColor3 = Color3.fromRGB(30, 30, 30)}):Play()
+                end
+            end
+            TweenService:Create(TabBtn, TweenInfo.new(0.2), {TextColor3 = Color3.fromRGB(255, 255, 255), BackgroundColor3 = Color3.fromRGB(50, 50, 50)}):Play()
         end)
 
-        -- İlk Tab ise aç
-        if CurrentPage == nil then
-            CurrentPage = Page
+        -- İlk Sayfa Kontrolü
+        if ActivePage == nil then
+            ActivePage = Page
             Page.Visible = true
+            TabBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+            TabBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
         end
 
-        local Funcs = {}
+        local Components = {}
 
         -- Toggle Ekleme
-        function Funcs:AddToggle(Text, Table, Key)
-            local Frame = Instance.new("Frame")
-            Frame.Size = UDim2.new(1, 0, 0, 35)
-            Frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-            Frame.Parent = Page
-            
-            local FCorner = Instance.new("UICorner")
-            FCorner.CornerRadius = UDim.new(0, 6)
-            FCorner.Parent = Frame
+        function Components:AddToggle(Text, ConfigTable, ConfigKey)
+            local ToggleFrame = Instance.new("TextButton")
+            ToggleFrame.Text = ""
+            ToggleFrame.Size = UDim2.new(1, 0, 0, 40)
+            ToggleFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+            ToggleFrame.AutoButtonColor = false
+            ToggleFrame.Parent = Page
+
+            local TfCorner = Instance.new("UICorner")
+            TfCorner.CornerRadius = UDim.new(0, 6)
+            TfCorner.Parent = ToggleFrame
 
             local Label = Instance.new("TextLabel")
             Label.Text = Text
             Label.Size = UDim2.new(0.7, 0, 1, 0)
-            Label.Position = UDim2.new(0, 10, 0, 0)
-            Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+            Label.Position = UDim2.new(0, 15, 0, 0)
             Label.BackgroundTransparency = 1
+            Label.TextColor3 = Color3.fromRGB(220, 220, 220)
             Label.Font = Enum.Font.GothamMedium
             Label.TextXAlignment = Enum.TextXAlignment.Left
-            Label.Parent = Frame
+            Label.TextSize = 14
+            Label.Parent = ToggleFrame
 
-            local Btn = Instance.new("TextButton")
-            Btn.Size = UDim2.new(0, 20, 0, 20)
-            Btn.Position = UDim2.new(1, -30, 0.5, -10)
-            Btn.Text = ""
-            Btn.BackgroundColor3 = Table[Key] and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(60, 60, 60)
-            Btn.Parent = Frame
-            
-            local BCorner = Instance.new("UICorner")
-            BCorner.CornerRadius = UDim.new(0, 4)
-            BCorner.Parent = Btn
+            -- Switch Görseli
+            local Switch = Instance.new("Frame")
+            Switch.Size = UDim2.new(0, 36, 0, 18)
+            Switch.Position = UDim2.new(1, -50, 0.5, -9)
+            Switch.BackgroundColor3 = ConfigTable[ConfigKey] and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(50, 50, 50)
+            Switch.Parent = ToggleFrame
+            local SCorner = Instance.new("UICorner")
+            SCorner.CornerRadius = UDim.new(1, 0)
+            SCorner.Parent = Switch
 
-            Btn.MouseButton1Click:Connect(function()
-                Table[Key] = not Table[Key]
-                Btn.BackgroundColor3 = Table[Key] and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(60, 60, 60)
+            local Dot = Instance.new("Frame")
+            Dot.Size = UDim2.new(0, 14, 0, 14)
+            Dot.Position = ConfigTable[ConfigKey] and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)
+            Dot.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+            Dot.Parent = Switch
+            local DCorner = Instance.new("UICorner")
+            DCorner.CornerRadius = UDim.new(1, 0)
+            DCorner.Parent = Dot
+
+            ToggleFrame.MouseButton1Click:Connect(function()
+                ConfigTable[ConfigKey] = not ConfigTable[ConfigKey]
+                local State = ConfigTable[ConfigKey]
+
+                -- Animasyon
+                TweenService:Create(Switch, TweenInfo.new(0.2), {BackgroundColor3 = State and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(50, 50, 50)}):Play()
+                TweenService:Create(Dot, TweenInfo.new(0.2), {Position = State and UDim2.new(1, -16, 0.5, -7) or UDim2.new(0, 2, 0.5, -7)}):Play()
             end)
         end
 
-        return Funcs
+        return Components
     end
 
-    -- TABLARI OLUŞTUR
-    local AimTab = CreateTab("COMBAT")
-    AimTab:AddToggle("Aimbot Active", Core.Settings.Aimbot, "Enabled")
-    AimTab:AddToggle("Team Check", Core.Settings.Aimbot, "TeamCheck")
-    AimTab:AddToggle("Wall Check", Core.Settings.Aimbot, "WallCheck")
+    -- [[ MENÜ OLUŞTURMA ]]
+    local Combat = CreateTab("COMBAT")
+    Combat:AddToggle("Aimbot Active", Core.Settings.Aimbot, "Enabled")
+    Combat:AddToggle("Team Check", Core.Settings.Aimbot, "TeamCheck")
+    Combat:AddToggle("Wall Check (Görünürlük)", Core.Settings.Aimbot, "WallCheck")
 
-    local VisTab = CreateTab("VISUALS")
-    VisTab:AddToggle("Box ESP", Core.Settings.Visuals, "Box")
-    VisTab:AddToggle("Name ESP", Core.Settings.Visuals, "Names")
-    VisTab:AddToggle("Health Bar", Core.Settings.Visuals, "Health")
+    local Visuals = CreateTab("VISUALS")
+    Visuals:AddToggle("Box ESP", Core.Settings.Visuals, "Box")
+    Visuals:AddToggle("Name ESP", Core.Settings.Visuals, "Names")
+    Visuals:AddToggle("Health Bar", Core.Settings.Visuals, "Health")
 
-    print(":: UI Framework Init Success ::")
+    print(":: UI Main Initialized ::")
 end
 
-return UILibrary
+return UI
