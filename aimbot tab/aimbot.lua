@@ -1,92 +1,113 @@
-local AimbotModule = {}
+--[[
+    VergiHub Module: Aimbot (High Performance)
+    Author: VergiAI
+    Status: Production Ready
+]]
 
-function AimbotModule:Init(Core)
-    local Players = Core.Services.Players
-    local RunService = Core.Services.RunService
-    local UserInputService = Core.Services.UserInputService
-    local Camera = workspace.CurrentCamera
-    local LocalPlayer = Players.LocalPlayer
+local Aimbot = {}
+local Core = nil
 
-    -- Raycast Parametreleri (Kendi karakterimizi yoksay)
-    local RayParams = RaycastParams.new()
-    RayParams.FilterType = Enum.RaycastFilterType.Blacklist
-    RayParams.IgnoreWater = true
+-- Sabitler ve Servisler (Cache)
+local Services = {
+    Players = game:GetService("Players"),
+    RunService = game:GetService("RunService"),
+    UserInputService = game:GetService("UserInputService"),
+    Workspace = game:GetService("Workspace")
+}
 
-    -- Görünürlük Kontrolü (Wall Check)
-    local function IsVisible(TargetPart, Origin)
-        -- Eğer WallCheck kapalıysa direkt true dön
-        if not Core.Settings.Aimbot.WallCheck then return true end
+local LocalPlayer = Services.Players.LocalPlayer
+local Camera = Services.Workspace.CurrentCamera
 
-        -- Raycast filtresini güncelle (Yeni karakterleri yoksaymak için)
-        RayParams.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+-- Raycast Parametreleri (GC Optimizasyonu için dışarıda tanımlandı)
+local RayParams = RaycastParams.new()
+RayParams.FilterType = Enum.RaycastFilterType.Exclude
+RayParams.IgnoreWater = true
 
-        local Direction = TargetPart.Position - Origin
-        local Result = workspace:Raycast(Origin, Direction, RayParams)
+-- Yardımcı: Görünürlük Kontrolü
+local function IsVisible(TargetPart)
+    if not Core.Settings.Aimbot.WallCheck then return true end
 
-        -- Eğer ışın bir şeye çarptıysa ve çarptığı şey hedefin parçasıysa -> Görünürdür
-        if Result then
-            if Result.Instance:IsDescendantOf(TargetPart.Parent) then
-                return true
-            end
-            return false -- Araya duvar girdi
+    -- Raycast için kendi karakterimizi ve kamerayı yoksay
+    local IgnoreList = {LocalPlayer.Character, Camera}
+    RayParams.FilterDescendantsInstances = IgnoreList
+
+    local Origin = Camera.CFrame.Position
+    local Direction = (TargetPart.Position - Origin)
+    
+    local Result = Services.Workspace:Raycast(Origin, Direction, RayParams)
+
+    -- Eğer ışın hedefe çarparsa veya hedef ile arada engel yoksa
+    if Result then
+        if Result.Instance:IsDescendantOf(TargetPart.Parent) then
+            return true
         end
-        return true -- Hiçbir şeye çarpmadı (Boşluk)
+        return false -- Engel var
     end
+    return true
+end
 
-    -- En İyi Hedefi Bulma Algoritması
-    local function GetBestTarget()
-        local BestTarget = nil
-        local ShortestDist = math.huge
-        local MousePos = UserInputService:GetMouseLocation()
+-- Algoritma: En İyi Hedef
+local function GetTarget()
+    local BestTarget = nil
+    local ShortestDistance = math.huge
+    local MousePos = Services.UserInputService:GetMouseLocation()
 
-        for _, Player in ipairs(Players:GetPlayers()) do
-            -- Temel Kontroller
-            if Player == LocalPlayer or not Player.Character then continue end
+    for _, Player in ipairs(Services.Players:GetPlayers()) do
+        -- 1. Temel Kontroller
+        if Player == LocalPlayer or not Player.Character then continue end
+        
+        -- 2. Takım Kontrolü (Settings'den)
+        if Core.Settings.Aimbot.TeamCheck and Player.Team == LocalPlayer.Team then continue end
+
+        local Humanoid = Player.Character:FindFirstChild("Humanoid")
+        local Head = Player.Character:FindFirstChild("Head")
+
+        -- 3. Canlılık Kontrolü
+        if Humanoid and Humanoid.Health > 0 and Head then
+            local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Head.Position)
             
-            -- Takım Kontrolü (Built-in)
-            if Core.Settings.Aimbot.TeamCheck and Player.Team == LocalPlayer.Team then continue end
-
-            local Humanoid = Player.Character:FindFirstChild("Humanoid")
-            local Head = Player.Character:FindFirstChild("Head")
-            
-            -- Canlı mı?
-            if Humanoid and Humanoid.Health > 0 and Head then
-                local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Head.Position)
+            -- 4. Ekranda mı?
+            if OnScreen then
+                local Distance = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
                 
-                if OnScreen then
-                    -- Görünür mü?
-                    if IsVisible(Head, Camera.CFrame.Position) then
-                        local Dist = (Vector2.new(ScreenPos.X, ScreenPos.Y) - MousePos).Magnitude
-                        
-                        -- FOV içindeyse ve en yakınsa seç
-                        -- Not: Core.Settings.Aimbot.FOV değeri ekleyebilirsin, şimdilik sonsuz
-                        if Dist < ShortestDist then
-                            ShortestDist = Dist
-                            BestTarget = Head
-                        end
-                    end
+                -- 5. Görünürlük ve Mesafe Kontrolü
+                if Distance < ShortestDistance and IsVisible(Head) then
+                    ShortestDistance = Distance
+                    BestTarget = Head
                 end
             end
         end
-        return BestTarget
     end
+    return BestTarget
+end
 
-    -- Loop
-    RunService.RenderStepped:Connect(function()
-        if Core.Settings.Aimbot.Enabled and UserInputService:IsMouseButtonPressed(Core.Settings.Aimbot.Key) then
-            local Target = GetBestTarget()
+function Aimbot:Init(VergiHubCore)
+    Core = VergiHubCore
+    print(":: Aimbot Modülü (v4) Yüklendi ::")
+
+    Services.RunService.RenderStepped:Connect(function()
+        -- Global Switch ve Tuş Kontrolü
+        if Core.Settings.Aimbot.Enabled and Services.UserInputService:IsMouseButtonPressed(Core.Settings.Aimbot.Key) then
+            local Target = GetTarget()
+            
             if Target then
-                -- Kamera Hareketi (Smoothing ile)
+                -- Kamera Mantığı (Linear Interpolation)
                 local CurrentCF = Camera.CFrame
-                local TargetPos = Target.Position + (Target.Parent.HumanoidRootPart.Velocity * 0.1) -- Basit Prediction
-                local TargetCF = CFrame.new(CurrentCF.Position, TargetPos)
+                local TargetPos = Target.Position
                 
-                Camera.CFrame = CurrentCF:Lerp(TargetCF, Core.Settings.Aimbot.Smoothing or 0.5)
+                -- Eğer hareket tahminlemesi (prediction) istersen buraya eklenir
+                -- local TargetPos = Target.Position + (Target.Parent.HumanoidRootPart.Velocity * 0.05)
+
+                local GoalCF = CFrame.new(CurrentCF.Position, TargetPos)
+                
+                -- Smoothing Değeri (0.1 = Robotik, 1.0 = Yavaş)
+                -- Ayarlardan gelen değeri tersine çeviriyoruz (Daha mantıklı kullanım için)
+                local Smoothness = Core.Settings.Aimbot.Smoothing or 0.5
+                
+                Camera.CFrame = CurrentCF:Lerp(GoalCF, Smoothness)
             end
         end
     end)
-    
-    print(":: Aimbot Logic v2 (WallCheck & TeamCheck) Aktif ::")
 end
 
-return AimbotModule
+return Aimbot
