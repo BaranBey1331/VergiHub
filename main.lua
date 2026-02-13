@@ -1,24 +1,23 @@
 --[[
-    VergiHub Kernel - Production Ready
+    VergiHub Kernel - Universal Build
     Author: Baran
 ]]
 
 local VergiHub = {
     Settings = {
-        -- Global Combat Settings
         Aimbot = {
             Enabled = true,
-            Key = Enum.KeyCode.E,
-            FOV = 120,
-            Smoothing = 0.5, -- 0 ile 1 arası (Düşük = Daha legit)
-            TargetPart = "Head",
-            WallCheck = true,
-            Prediction = 0.145, -- Ping/Velocity tahmin katsayısı
-            ShowFOV = true
+            Key = Enum.UserInputType.MouseButton2, -- Sağ Tık
+            Smoothing = 0.2, -- 0.1 (Robotik) - 1.0 (Yavaş)
+            TeamCheck = true
         },
         Visuals = {
-            BoxEsp = true,
-            Tracer = false
+            Box = true,
+            Names = true,
+            Health = true
+        },
+        UI = {
+            Open = false -- UI Başlangıç durumu
         }
     },
     BaseURL = "https://raw.githubusercontent.com/BaranBey1331/VergiHub/main/",
@@ -26,34 +25,44 @@ local VergiHub = {
         Players = game:GetService("Players"),
         RunService = game:GetService("RunService"),
         UserInputService = game:GetService("UserInputService"),
-        Workspace = game:GetService("Workspace")
+        TweenService = game:GetService("TweenService")
     }
 }
 
--- Global erişim (Debug için)
+-- Global Erişim
 getgenv().VergiHub = VergiHub
 
--- Modül Yükleyici (GitHub Raw Çekici)
+-- Modül Import Fonksiyonu
 function VergiHub:Import(path)
     local url = self.BaseURL .. path
     local success, result = pcall(function() return game:HttpGet(url) end)
-    if not success then return warn("CRITICAL: Dosya çekilemedi ->", path) end
     
-    local func, err = loadstring(result)
-    if not func then return warn("SYNTAX ERROR ->", path, err) end
+    if not success then 
+        warn(":: KRİTİK HATA :: Dosya yüklenemedi -> " .. path)
+        return nil 
+    end
+    
+    local func, loadErr = loadstring(result)
+    if not func then 
+        warn(":: SÖZDİZİMİ HATASI :: " .. path .. " -> " .. loadErr) 
+        return nil 
+    end
     
     return func()
 end
 
--- Başlatma Sırası
 print(":: VergiHub Başlatılıyor ::")
 
--- 1. UI Yükle (Önce arayüz ki ayarları görelim)
-local UI = VergiHub:Import("ui%20tab/uimain.lua")
+-- 1. Görsel Modüller (ESP)
+local ESP = VergiHub:Import("aimbot%20tab/esp.lua")
+if ESP then task.spawn(function() ESP:Init(VergiHub) end) end
+
+-- 2. Savaş Modülleri (Aimbot)
+local Aimbot = VergiHub:Import("aimbot%20tab/aimbot.lua")
+if Aimbot then task.spawn(function() Aimbot:Init(VergiHub) end) end
+
+-- 3. Arayüz (Floating UI)
+local UI = VergiHub:Import("ui%20tab/floatingmenu.lua")
 if UI then UI:Init(VergiHub) end
 
--- 2. Aimbot Yükle (Logic)
-local Aimbot = VergiHub:Import("aimbot%20tab/aimbot.lua")
-if Aimbot then Aimbot:Init(VergiHub) end
-
-print(":: Sistem Aktif ::")
+print(":: Sistem Hazır ::")
