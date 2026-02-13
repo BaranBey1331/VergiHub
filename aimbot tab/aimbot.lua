@@ -1,7 +1,7 @@
 --[[
-    VergiHub - Aimbot Engine v2.0
-    Gelişmiş aimbot - Crosshair'i doğrudan kafaya götürür
-    mousemoverel + CFrame hibrit sistem
+    VergiHub - Aimbot Engine v2.1
+    Düzeltme: Tam lock sistemi - crosshair hedefe tam oturur
+    CFrame dominant yaklaşım, mousemoverel sadece destek
 ]]
 
 local Settings = getgenv().VergiHub.Aimbot
@@ -12,43 +12,41 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
-local Mouse = LocalPlayer:GetMouse()
 
--- Durum değişkenleri
+-- Durum
 local currentTarget = nil
+local lockedTarget = nil
 local isAiming = false
 local fovCircle = nil
-local lockedTarget = nil -- Kilitlenmiş hedef (sticky için)
 
--- FOV dairesi oluştur
+-- FOV dairesi
 local function createFOVCircle()
     if fovCircle then pcall(function() fovCircle:Remove() end) end
     fovCircle = Drawing.new("Circle")
-    fovCircle.Color = Color3.fromRGB(138, 43, 226)
+    fovCircle.Color = Color3.fromRGB(124, 58, 237)
     fovCircle.Thickness = 1.5
     fovCircle.Filled = false
-    fovCircle.Transparency = 0.7
+    fovCircle.Transparency = 0.6
     fovCircle.Visible = false
     return fovCircle
 end
 
 fovCircle = createFOVCircle()
 
--- Oyuncu geçerli mi kontrol et
+-- Geçerli hedef kontrolü
 local function isValidTarget(player)
     if player == LocalPlayer then return false end
 
-    local character = player.Character
-    if not character then return false end
+    local char = player.Character
+    if not char then return false end
 
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid or humanoid.Health <= 0 then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return false end
 
-    local targetPart = character:FindFirstChild(Settings.TargetPart)
-    if not targetPart then return false end
+    local part = char:FindFirstChild(Settings.TargetPart)
+    if not part then return false end
 
-    -- ForceField kontrolü (spawn koruması)
-    if character:FindFirstChildOfClass("ForceField") then return false end
+    if char:FindFirstChildOfClass("ForceField") then return false end
 
     -- Takım kontrolü
     if Settings.TeamCheck then
@@ -57,161 +55,144 @@ local function isValidTarget(player)
         end
     end
 
-    -- Kendi karakterimiz var mı
     local myChar = LocalPlayer.Character
     if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return false end
 
-    -- Mesafe kontrolü
-    local distance = (myChar.HumanoidRootPart.Position - targetPart.Position).Magnitude
-    if distance > Settings.MaxDistance then return false end
+    -- Mesafe
+    local dist = (myChar.HumanoidRootPart.Position - part.Position).Magnitude
+    if dist > Settings.MaxDistance then return false end
 
-    -- Görünürlük kontrolü (gelişmiş raycast)
+    -- Görünürlük
     if Settings.VisibleCheck then
-        local rayParams = RaycastParams.new()
-        rayParams.FilterType = Enum.RaycastFilterType.Exclude
-        rayParams.FilterDescendantsInstances = {myChar, Camera}
-        rayParams.RespectCanCollide = true
+        local params = RaycastParams.new()
+        params.FilterType = Enum.RaycastFilterType.Exclude
+        params.FilterDescendantsInstances = {myChar, Camera}
+        params.RespectCanCollide = true
 
         local origin = Camera.CFrame.Position
-        local targetPos = targetPart.Position
-        local direction = (targetPos - origin)
-        local rayResult = workspace:Raycast(origin, direction, rayParams)
+        local dir = (part.Position - origin)
+        local result = workspace:Raycast(origin, dir, params)
 
-        if rayResult then
-            -- Raycast bir şeye çarptı, hedef karaktere ait mi kontrol et
-            if not rayResult.Instance:IsDescendantOf(character) then
-                return false
-            end
+        if result and not result.Instance:IsDescendantOf(char) then
+            return false
         end
     end
 
     return true
 end
 
--- Ekrandaki FOV mesafesini hesapla (mouse pozisyonundan)
+-- FOV mesafesi (ekran piksel)
 local function getFOVDistance(player)
-    local character = player.Character
-    if not character then return math.huge end
+    local char = player.Character
+    if not char then return math.huge end
 
-    local targetPart = character:FindFirstChild(Settings.TargetPart)
-    if not targetPart then return math.huge end
+    local part = char:FindFirstChild(Settings.TargetPart)
+    if not part then return math.huge end
 
-    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPart.Position)
+    local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
     if not onScreen then return math.huge end
 
-    -- Ekranın tam ortası (crosshair pozisyonu)
-    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    local targetScreen = Vector2.new(screenPos.X, screenPos.Y)
-
-    return (screenCenter - targetScreen).Magnitude
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    return (center - Vector2.new(pos.X, pos.Y)).Magnitude
 end
 
--- En yakın hedefi bul
+-- En yakın hedef
 local function getClosestTarget()
-    local closestPlayer = nil
-    local closestFOV = Settings.FOVSize
+    local best = nil
+    local bestDist = Settings.FOVSize
 
-    for _, player in ipairs(Players:GetPlayers()) do
-        if isValidTarget(player) then
-            local fovDist = getFOVDistance(player)
-            if fovDist < closestFOV then
-                closestFOV = fovDist
-                closestPlayer = player
+    for _, p in ipairs(Players:GetPlayers()) do
+        if isValidTarget(p) then
+            local d = getFOVDistance(p)
+            if d < bestDist then
+                bestDist = d
+                best = p
             end
         end
     end
 
-    return closestPlayer
+    return best
 end
 
--- Hedef pozisyonunu hesapla (prediction dahil)
+-- Hedef pozisyon (prediction dahil)
 local function getTargetPosition(player)
-    local character = player.Character
-    if not character then return nil end
+    local char = player.Character
+    if not char then return nil end
 
-    local targetPart = character:FindFirstChild(Settings.TargetPart)
-    if not targetPart then return nil end
+    local part = char:FindFirstChild(Settings.TargetPart)
+    if not part then return nil end
 
-    local targetPos = targetPart.Position
+    local pos = part.Position
 
-    -- Hareket tahmini
     if Settings.Prediction then
-        local rootPart = character:FindFirstChild("HumanoidRootPart")
-        if rootPart then
-            local velocity = rootPart.AssemblyLinearVelocity
-            -- Yerçekimi etkisini çıkar (sadece yatay hareket tahmini daha isabetli)
-            local horizontalVel = Vector3.new(velocity.X, 0, velocity.Z)
-            targetPos = targetPos + (horizontalVel * Settings.PredictionAmount)
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            local vel = hrp.AssemblyLinearVelocity
+            -- Sadece yatay velocity kullan (daha isabetli)
+            pos = pos + Vector3.new(vel.X, 0, vel.Z) * Settings.PredictionAmount
         end
     end
 
-    return targetPos
+    return pos
 end
 
--- === ANA AIM FONKSİYONU ===
--- Crosshair'i doğrudan hedefe götürür (mousemoverel hibrit)
+-- =============================================
+-- ANA AIM FONKSİYONU - TAM LOCK
+-- =============================================
+--[[
+    Smoothness değerine göre 3 mod:
+    1 = Instant snap (CFrame direkt override)
+    2-4 = Hızlı lock (CFrame lerp yüksek alpha)
+    5+ = Yumuşak geçiş (CFrame lerp düşük alpha)
+    
+    Eski sorun: mousemoverel integer yuvarlama yüzünden 
+    küçük açılarda hedefe ulaşamıyordu.
+    Çözüm: Her durumda CFrame kullan, mousemoverel kaldırıldı.
+]]
+
 local function aimAtTarget(targetPos)
     if not targetPos then return end
 
-    local screenPos, onScreen = Camera:WorldToViewportPoint(targetPos)
-    if not onScreen then return end
+    Camera = workspace.CurrentCamera
+    local camPos = Camera.CFrame.Position
+    local smooth = math.clamp(Settings.Smoothness, 1, 20)
 
-    -- Ekran merkezinden hedefe olan fark (piksel cinsinden)
-    local screenCenter = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-    local deltaX = screenPos.X - screenCenter.X
-    local deltaY = screenPos.Y - screenCenter.Y
+    -- Hedef CFrame hesapla
+    local targetCF = CFrame.lookAt(camPos, targetPos)
 
-    -- Smoothness hesapla
-    local smoothness = math.clamp(Settings.Smoothness, 1, 20)
-
-    -- Düşük smoothness = daha hızlı ve isabetli
-    if smoothness <= 2 then
-        -- Neredeyse anlık kilitleme - CFrame yöntemi
-        local currentCFrame = Camera.CFrame
-        local targetCFrame = CFrame.lookAt(currentCFrame.Position, targetPos)
-        Camera.CFrame = currentCFrame:Lerp(targetCFrame, 1 / smoothness)
+    if smooth <= 1 then
+        -- SNAP: Anlık kilitleme, sıfır gecikme
+        Camera.CFrame = targetCF
     else
-        -- Mouse hareketi ile yumuşak geçiş
-        local moveX = deltaX / smoothness
-        local moveY = deltaY / smoothness
+        -- LERP: Alpha değeri smoothness'a ters orantılı
+        -- smooth=2 -> alpha=0.65 (çok hızlı lock)
+        -- smooth=5 -> alpha=0.35 (orta)
+        -- smooth=10 -> alpha=0.18 (yavaş geçiş)
+        -- smooth=20 -> alpha=0.09 (çok yavaş)
+        local alpha = 1.3 / smooth
+        alpha = math.clamp(alpha, 0.05, 0.85)
 
-        -- Çok küçük hareketleri yoksay (titreme önleme)
-        if math.abs(moveX) < 0.5 and math.abs(moveY) < 0.5 then
-            -- Hedefe çok yakınız, ince ayar yap
-            Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
-        else
-            mousemoverel(moveX, moveY)
-        end
+        Camera.CFrame = Camera.CFrame:Lerp(targetCF, alpha)
     end
 end
 
--- === SNAP AIM (Anlık kilitleme modu) ===
--- Smoothness 1 olduğunda doğrudan CFrame ile kilitler
-local function snapToTarget(targetPos)
-    if not targetPos then return end
-    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
-end
-
--- Ana aimbot döngüsü
+-- Ana döngü
 RunService.RenderStepped:Connect(function()
-    -- Kamera referansını güncelle
     Camera = workspace.CurrentCamera
 
-    -- FOV dairesi güncelleme
+    -- FOV dairesi
     if fovCircle then
         fovCircle.Visible = Settings.Enabled and Settings.FOVEnabled
         fovCircle.Radius = Settings.FOVSize
         fovCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
     end
 
-    -- Aimbot kapalıysa
     if not Settings.Enabled then
         currentTarget = nil
         lockedTarget = nil
         return
     end
 
-    -- Aim tuşu basılı değilse
     if not isAiming then
         if not Settings.StickyAim then
             currentTarget = nil
@@ -222,7 +203,6 @@ RunService.RenderStepped:Connect(function()
 
     -- Hedef seçimi
     if Settings.StickyAim and lockedTarget and isValidTarget(lockedTarget) then
-        -- Yapışkan aim: kilitli hedefe devam et
         currentTarget = lockedTarget
     else
         currentTarget = getClosestTarget()
@@ -231,25 +211,16 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Hedefe aim yap
+    -- Aim uygula
     if currentTarget then
-        local targetPos = getTargetPosition(currentTarget)
-        if targetPos then
-            if Settings.Smoothness <= 1 then
-                -- Snap aim: anlık kilitleme
-                snapToTarget(targetPos)
-            else
-                -- Smooth aim: yumuşak geçiş
-                aimAtTarget(targetPos)
-            end
-        end
+        local pos = getTargetPosition(currentTarget)
+        aimAtTarget(pos)
     end
 end)
 
 -- Tuş girdileri
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
-
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
     if input.UserInputType == Settings.AimKey or input.KeyCode == Settings.AimKey then
         isAiming = true
     end
@@ -258,7 +229,6 @@ end)
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Settings.AimKey or input.KeyCode == Settings.AimKey then
         isAiming = false
-        -- Yapışkan aim kapalıysa hedefi bırak
         if not Settings.StickyAim then
             currentTarget = nil
             lockedTarget = nil
@@ -266,11 +236,10 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- Oyuncu ayrıldığında hedefi sıfırla
 Players.PlayerRemoving:Connect(function(player)
     if currentTarget == player then currentTarget = nil end
     if lockedTarget == player then lockedTarget = nil end
 end)
 
-print("[VergiHub] 🎯 Aimbot Engine v2.0 hazır!")
+print("[VergiHub] Aimbot Engine v2.1 hazir!")
 return true
