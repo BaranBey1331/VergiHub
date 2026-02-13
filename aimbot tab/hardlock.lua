@@ -1,17 +1,22 @@
 --[[
-    VergiHub - HardLock v1.0
-    Farklı lock türleri: Snap, Flick, Rage, Silent
+    VergiHub - HardLock v2.0
     
-    Lock Türleri:
-    - SNAP:   Anlık kilitleme, bırakınca serbest
-    - FLICK:  Hızlı flick sonrası yavaş takip
-    - RAGE:   Her frame tam override, 0 smooth, prediction agresif
-    - SILENT: Kamera hareket etmez, sunucuya farklı açı gönderir (exploit gerekir)
+    Düzeltmeler:
+    - Flick artık anlık + takip fazı düzgün çalışıyor
+    - Snap gerçekten her frame tam lock
+    - Rage mode agresif, sıfır tolerans
+    - Silent mode düzgün hook sistemi
+    - Indicator düzgün pozisyonlanıyor
     
-    Tüm türler başlangıçta kapalı gelir.
+    Lock Modları:
+    - SNAP:   Her frame CFrame override, tuş basılıyken tam lock
+    - FLICK:  İlk frame hızlı snap, sonra smooth takip
+    - RAGE:   Snap + agresif prediction + auto fire
+    - SILENT: Kameraya dokunmaz, namecall hook ile sunucuya aim gönderir
 ]]
 
 local Settings = getgenv().VergiHub.Aimbot
+local HLSettings = getgenv().VergiHub.HardLock
 
 -- Servisler
 local Players = game:GetService("Players")
@@ -20,63 +25,62 @@ local UserInputService = game:GetService("UserInputService")
 local Camera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- HardLock global ayarları
-if not getgenv().VergiHub.HardLock then
-    getgenv().VergiHub.HardLock = {
-        Enabled = false,           -- HardLock açık/kapalı
-        Mode = "Snap",             -- "Snap", "Flick", "Rage", "Silent"
-        LockKey = Enum.KeyCode.Q,  -- HardLock tuşu
-        TargetPart = "Head",       -- Hedef parça (aimbot'dan bağımsız override)
-        OverrideTarget = false,    -- true ise kendi TargetPart'ını kullanır
-        AutoFire = false,          -- Rage modda otomatik ateş
-        FlickSpeed = 0.08,         -- Flick süresi (saniye)
-        FlickReturn = 0.3,         -- Flick sonrası takip hızı
-        RagePrediction = 0.2,      -- Rage mod prediction çarpanı
-        Indicator = false,         -- Ekranda lock göstergesi
-    }
-end
-
-local HLSettings = getgenv().VergiHub.HardLock
-
 -- Durum
 local hlTarget = nil
 local hlActive = false
-local lockIndicator = nil
-local lockTargetText = nil
+local flickLocked = false    -- Flick ilk snap yapıldı mı
+local flickLockTime = 0      -- Flick başlangıç zamanı
 
 -- ==========================================
--- LOCK GÖSTERGESİ (Drawing API)
+-- GÖSTERGE (Drawing API)
 -- ==========================================
 
-local function createIndicator()
-    -- Merkez lock ikonu
-    if lockIndicator then pcall(function() lockIndicator:Remove() end) end
-    lockIndicator = Drawing.new("Circle")
-    lockIndicator.Radius = 6
-    lockIndicator.Color = Color3.fromRGB(248, 113, 113)
-    lockIndicator.Thickness = 2
-    lockIndicator.Filled = false
-    lockIndicator.Visible = false
+local lockCircle = nil
+local lockText = nil
+local lockLine = nil
 
-    -- Hedef ismi
-    if lockTargetText then pcall(function() lockTargetText:Remove() end) end
-    lockTargetText = Drawing.new("Text")
-    lockTargetText.Size = 13
-    lockTargetText.Center = true
-    lockTargetText.Outline = true
-    lockTargetText.OutlineColor = Color3.fromRGB(0, 0, 0)
-    lockTargetText.Font = Drawing.Fonts.Plex
-    lockTargetText.Color = Color3.fromRGB(248, 113, 113)
-    lockTargetText.Visible = false
+local function createIndicators()
+    -- Hedef etrafı daire
+    pcall(function()
+        if lockCircle then lockCircle:Remove() end
+        if lockText then lockText:Remove() end
+        if lockLine then lockLine:Remove() end
+    end)
+
+    lockCircle = Drawing.new("Circle")
+    lockCircle.Radius = 12
+    lockCircle.Thickness = 2
+    lockCircle.Filled = false
+    lockCircle.Visible = false
+
+    lockText = Drawing.new("Text")
+    lockText.Size = 12
+    lockText.Center = true
+    lockText.Outline = true
+    lockText.OutlineColor = Color3.fromRGB(0, 0, 0)
+    lockText.Font = Drawing.Fonts.Plex
+    lockText.Visible = false
+
+    lockLine = Drawing.new("Line")
+    lockLine.Thickness = 1
+    lockLine.Visible = false
 end
 
-createIndicator()
+createIndicators()
+
+-- Renk tablosu
+local MODE_COLORS = {
+    Snap   = Color3.fromRGB(52, 211, 153),   -- Yeşil
+    Flick  = Color3.fromRGB(251, 191, 36),    -- Sarı
+    Rage   = Color3.fromRGB(248, 113, 113),   -- Kırmızı
+    Silent = Color3.fromRGB(96, 165, 250),    -- Mavi
+}
 
 -- ==========================================
--- HEDEF BULMA (Aimbot'dan bağımsız)
+-- HEDEF SİSTEMİ
 -- ==========================================
 
-local function isHLValidTarget(player)
+local function isHLValid(player)
     if player == LocalPlayer then return false end
 
     local char = player.Character
@@ -91,7 +95,6 @@ local function isHLValidTarget(player)
 
     if char:FindFirstChildOfClass("ForceField") then return false end
 
-    -- Takım kontrolü (aimbot ayarından al)
     if Settings.TeamCheck then
         if player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then
             return false
@@ -104,7 +107,6 @@ local function isHLValidTarget(player)
     local dist = (myChar.HumanoidRootPart.Position - part.Position).Magnitude
     if dist > Settings.MaxDistance then return false end
 
-    -- Görünürlük
     if Settings.VisibleCheck then
         local params = RaycastParams.new()
         params.FilterType = Enum.RaycastFilterType.Exclude
@@ -123,21 +125,20 @@ local function isHLValidTarget(player)
     return true
 end
 
--- Crosshair'e en yakın hedef
 local function getHLTarget()
     local best = nil
     local bestDist = Settings.FOVSize
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 
     for _, p in ipairs(Players:GetPlayers()) do
-        if isHLValidTarget(p) then
+        if isHLValid(p) then
             local char = p.Character
             local partName = HLSettings.OverrideTarget and HLSettings.TargetPart or Settings.TargetPart
             local part = char and char:FindFirstChild(partName)
             if part then
-                local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                local sp, onScreen = Camera:WorldToViewportPoint(part.Position)
                 if onScreen then
-                    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-                    local d = (center - Vector2.new(pos.X, pos.Y)).Magnitude
+                    local d = (center - Vector2.new(sp.X, sp.Y)).Magnitude
                     if d < bestDist then
                         bestDist = d
                         best = p
@@ -150,8 +151,8 @@ local function getHLTarget()
     return best
 end
 
--- Hedef pozisyon
-local function getHLTargetPos(player)
+-- Hedef pozisyon (mode'a göre prediction)
+local function getHLPos(player)
     local char = player.Character
     if not char then return nil end
 
@@ -160,19 +161,30 @@ local function getHLTargetPos(player)
     if not part then return nil end
 
     local pos = part.Position
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return pos end
 
-    -- Rage modda agresif prediction
-    if HLSettings.Mode == "Rage" then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local vel = hrp.AssemblyLinearVelocity
-            pos = pos + Vector3.new(vel.X, vel.Y * 0.3, vel.Z) * HLSettings.RagePrediction
-        end
-    elseif Settings.Prediction then
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            local vel = hrp.AssemblyLinearVelocity
+    local vel = hrp.AssemblyLinearVelocity
+    local mode = HLSettings.Mode
+
+    if mode == "Rage" then
+        -- Agresif prediction: tam velocity + dikey
+        local predAmount = HLSettings.RagePrediction
+        pos = pos + vel * predAmount
+    elseif mode == "Flick" then
+        -- Orta prediction
+        if Settings.Prediction then
             pos = pos + Vector3.new(vel.X, 0, vel.Z) * Settings.PredictionAmount
+        end
+    elseif mode == "Snap" then
+        -- Hafif prediction
+        if Settings.Prediction then
+            pos = pos + Vector3.new(vel.X, 0, vel.Z) * Settings.PredictionAmount * 0.8
+        end
+    elseif mode == "Silent" then
+        -- Tam prediction
+        if Settings.Prediction then
+            pos = pos + Vector3.new(vel.X, vel.Y * 0.3, vel.Z) * Settings.PredictionAmount
         end
     end
 
@@ -183,88 +195,81 @@ end
 -- LOCK MODLARI
 -- ==========================================
 
--- SNAP: Anlık kamera override
+-- SNAP: Her frame tam CFrame override
 local function lockSnap(targetPos)
-    if not targetPos then return end
     Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
 end
 
--- FLICK: Hızlı flick + takip
-local flickPhase = "idle" -- "idle", "flick", "track"
-local flickStartTime = 0
-
+-- FLICK: İlk frame anlık snap, sonra smooth tracking
 local function lockFlick(targetPos)
-    if not targetPos then return end
-
-    if flickPhase == "idle" then
-        -- İlk frame: hızlı flick başlat
-        flickPhase = "flick"
-        flickStartTime = tick()
+    if not flickLocked then
+        -- İlk frame: ANLIK SNAP (gerçek flick)
+        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
+        flickLocked = true
+        flickLockTime = tick()
+        return
     end
 
-    local elapsed = tick() - flickStartTime
-    local camPos = Camera.CFrame.Position
-    local targetCF = CFrame.lookAt(camPos, targetPos)
+    -- Sonraki frameler: smooth takip
+    local elapsed = tick() - flickLockTime
+    local returnSpeed = HLSettings.FlickReturn
 
-    if flickPhase == "flick" then
-        -- Flick aşaması: çok hızlı interpolasyon
-        local flickAlpha = math.clamp(elapsed / HLSettings.FlickSpeed, 0, 1)
-        -- Ease out cubic
-        flickAlpha = 1 - (1 - flickAlpha) ^ 3
-        Camera.CFrame = Camera.CFrame:Lerp(targetCF, flickAlpha)
-
-        if flickAlpha >= 0.98 then
-            flickPhase = "track"
-        end
-    elseif flickPhase == "track" then
-        -- Takip aşaması: yumuşak izleme
-        Camera.CFrame = Camera.CFrame:Lerp(targetCF, HLSettings.FlickReturn)
+    -- İlk 0.1s tam lock, sonra smooth geçiş
+    if elapsed < 0.1 then
+        Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
+    else
+        -- Smooth tracking (returnSpeed: 0.1 = yavaş, 0.8 = hızlı)
+        local targetCF = CFrame.lookAt(Camera.CFrame.Position, targetPos)
+        Camera.CFrame = Camera.CFrame:Lerp(targetCF, returnSpeed)
     end
 end
 
--- RAGE: Her frame tam override, sıfır tolerans
+-- RAGE: Tam override + auto fire
 local function lockRage(targetPos)
-    if not targetPos then return end
-    -- Her frame direkt üzerine otur
+    -- Her frame tam override, sıfır smooth
     Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetPos)
 end
 
--- SILENT: Kamera değişmez, sadece sunucuya farklı açı
--- Not: Bu mod exploit seviyesi gerektirir (hookfunction, namecall hook)
+-- SILENT: Kameraya dokunma
 local silentTargetPos = nil
 
 local function lockSilent(targetPos)
-    -- Kameraya dokunma, sadece hedefi kaydet
     silentTargetPos = targetPos
+    -- Kamera değişmez
 end
 
--- Silent aim hook (namecall)
-local function setupSilentHook()
-    if not HLSettings.Enabled or HLSettings.Mode ~= "Silent" then return end
+-- Silent hook (bir kez kurulur)
+local silentHookInstalled = false
 
-    -- Eski hook varsa kaldır
-    if getgenv().VergiHub_SilentHookActive then return end
+local function installSilentHook()
+    if silentHookInstalled then return end
+    if not hookmetamethod then return end
 
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local args = {...}
+    pcall(function()
+        local mt = getrawmetatable(game)
+        local oldReadonly = isreadonly(mt)
+        setreadonly(mt, false)
 
-        -- Mouse.Hit override (bazı oyunlar bunu kullanır)
-        if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" then
+        local oldNamecall = mt.__namecall
+        mt.__namecall = newcclosure(function(self, ...)
+            local method = getnamecallmethod()
+
             if silentTargetPos and hlActive and HLSettings.Mode == "Silent" then
-                -- Ray'i hedefe yönlendir
-                local origin = Camera.CFrame.Position
-                local dir = (silentTargetPos - origin).Unit * 1000
-                args[1] = Ray.new(origin, dir)
-                return oldNamecall(self, unpack(args))
+                if method == "FindPartOnRayWithIgnoreList" or method == "FindPartOnRay" then
+                    local args = {...}
+                    local origin = Camera.CFrame.Position
+                    local dir = (silentTargetPos - origin).Unit * 1000
+                    args[1] = Ray.new(origin, dir)
+                    return oldNamecall(self, unpack(args))
+                end
             end
-        end
 
-        return oldNamecall(self, ...)
-    end))
+            return oldNamecall(self, ...)
+        end)
 
-    getgenv().VergiHub_SilentHookActive = true
+        setreadonly(mt, oldReadonly)
+        silentHookInstalled = true
+    end)
 end
 
 -- ==========================================
@@ -273,45 +278,41 @@ end
 
 RunService.RenderStepped:Connect(function()
     Camera = workspace.CurrentCamera
+    local mode = HLSettings.Mode
+    local modeColor = MODE_COLORS[mode] or MODE_COLORS.Snap
 
     -- Kapalıysa temizle
-    if not HLSettings.Enabled then
-        hlTarget = nil
-        hlActive = false
-        flickPhase = "idle"
-        silentTargetPos = nil
-        if lockIndicator then lockIndicator.Visible = false end
-        if lockTargetText then lockTargetText.Visible = false end
+    if not HLSettings.Enabled or not hlActive then
+        if not hlActive then
+            hlTarget = nil
+            flickLocked = false
+            silentTargetPos = nil
+        end
+        if lockCircle then lockCircle.Visible = false end
+        if lockText then lockText.Visible = false end
+        if lockLine then lockLine.Visible = false end
         return
     end
 
-    -- Tuş basılı değilse
-    if not hlActive then
-        flickPhase = "idle"
-        silentTargetPos = nil
-        if lockIndicator then lockIndicator.Visible = false end
-        if lockTargetText then lockTargetText.Visible = false end
-        return
-    end
-
-    -- Hedef seç (ilk basışta kilitlenir, bırakana kadar tutar)
-    if not hlTarget or not isHLValidTarget(hlTarget) then
+    -- Hedef seç (ilk basışta kilitlenir)
+    if not hlTarget or not isHLValid(hlTarget) then
         hlTarget = getHLTarget()
-        flickPhase = "idle" -- Yeni hedef, flick sıfırla
+        flickLocked = false -- Yeni hedef, flick sıfırla
     end
 
+    -- Hedef yoksa göstergeleri gizle
     if not hlTarget then
-        if lockIndicator then lockIndicator.Visible = false end
-        if lockTargetText then lockTargetText.Visible = false end
+        if lockCircle then lockCircle.Visible = false end
+        if lockText then lockText.Visible = false end
+        if lockLine then lockLine.Visible = false end
         return
     end
 
-    local targetPos = getHLTargetPos(hlTarget)
+    -- Hedef pozisyon hesapla
+    local targetPos = getHLPos(hlTarget)
     if not targetPos then return end
 
     -- Seçili moda göre lock uygula
-    local mode = HLSettings.Mode
-
     if mode == "Snap" then
         lockSnap(targetPos)
     elseif mode == "Flick" then
@@ -322,28 +323,7 @@ RunService.RenderStepped:Connect(function()
         lockSilent(targetPos)
     end
 
-    -- Gösterge güncelle
-    if HLSettings.Indicator then
-        local screenPos, onScreen = Camera:WorldToViewportPoint(targetPos)
-        if onScreen then
-            lockIndicator.Position = Vector2.new(screenPos.X, screenPos.Y)
-            lockIndicator.Visible = true
-            lockIndicator.Color = (mode == "Rage") and Color3.fromRGB(255, 50, 50) or
-                                  (mode == "Silent") and Color3.fromRGB(50, 200, 255) or
-                                  (mode == "Flick") and Color3.fromRGB(255, 180, 50) or
-                                  Color3.fromRGB(248, 113, 113)
-
-            lockTargetText.Position = Vector2.new(screenPos.X, screenPos.Y - 18)
-            lockTargetText.Text = hlTarget.DisplayName .. " [" .. mode .. "]"
-            lockTargetText.Color = lockIndicator.Color
-            lockTargetText.Visible = true
-        else
-            lockIndicator.Visible = false
-            lockTargetText.Visible = false
-        end
-    end
-
-    -- Rage Auto Fire
+    -- Rage auto fire
     if mode == "Rage" and HLSettings.AutoFire then
         local partName = HLSettings.OverrideTarget and HLSettings.TargetPart or Settings.TargetPart
         local part = hlTarget.Character and hlTarget.Character:FindFirstChild(partName)
@@ -352,12 +332,45 @@ RunService.RenderStepped:Connect(function()
             if os then
                 local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
                 local dist = (center - Vector2.new(sp.X, sp.Y)).Magnitude
-                -- Crosshair hedefe 5px yakınsa ateşle
-                if dist < 5 then
+                if dist < 8 then
                     mouse1click()
                 end
             end
         end
+    end
+
+    -- Gösterge güncelle
+    if HLSettings.Indicator then
+        local screenPos, onScreen = Camera:WorldToViewportPoint(targetPos)
+
+        if onScreen then
+            -- Lock dairesi
+            lockCircle.Position = Vector2.new(screenPos.X, screenPos.Y)
+            lockCircle.Color = modeColor
+            lockCircle.Visible = true
+
+            -- Hedef ismi + mod
+            lockText.Position = Vector2.new(screenPos.X, screenPos.Y - 22)
+            lockText.Text = hlTarget.DisplayName .. " [" .. mode .. "]"
+            lockText.Color = modeColor
+            lockText.Visible = true
+
+            -- Crosshair'den hedefe çizgi
+            local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+            lockLine.From = center
+            lockLine.To = Vector2.new(screenPos.X, screenPos.Y)
+            lockLine.Color = modeColor
+            lockLine.Transparency = 0.5
+            lockLine.Visible = true
+        else
+            lockCircle.Visible = false
+            lockText.Visible = false
+            lockLine.Visible = false
+        end
+    else
+        if lockCircle then lockCircle.Visible = false end
+        if lockText then lockText.Visible = false end
+        if lockLine then lockLine.Visible = false end
     end
 end)
 
@@ -371,13 +384,12 @@ UserInputService.InputBegan:Connect(function(input, gpe)
 
     if input.KeyCode == HLSettings.LockKey then
         hlActive = true
-        -- Yeni lock başlangıcında hedef bul
         hlTarget = getHLTarget()
-        flickPhase = "idle"
+        flickLocked = false
 
         -- Silent hook kur
         if HLSettings.Mode == "Silent" then
-            pcall(setupSilentHook)
+            pcall(installSilentHook)
         end
     end
 end)
@@ -386,7 +398,7 @@ UserInputService.InputEnded:Connect(function(input)
     if input.KeyCode == HLSettings.LockKey then
         hlActive = false
         hlTarget = nil
-        flickPhase = "idle"
+        flickLocked = false
         silentTargetPos = nil
     end
 end)
@@ -395,9 +407,9 @@ end)
 Players.PlayerRemoving:Connect(function(player)
     if hlTarget == player then
         hlTarget = nil
-        flickPhase = "idle"
+        flickLocked = false
     end
 end)
 
-print("[VergiHub] HardLock v1.0 hazir!")
+print("[VergiHub] HardLock v2.0 hazir!")
 return true
