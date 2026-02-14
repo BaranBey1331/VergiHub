@@ -1,12 +1,12 @@
 --[[
-    VergiHub - Liquid Glass Controls & Tabs v1.0
-    Glass toggle, slider, dropdown + tüm tab içerikleri
+    VergiHub - Liquid Glass Controls & Tabs v2.0
+    
+    Duzeltme: Ilk tab aktif basliyor, tum feature'lar gorunuyor
 ]]
 
 local Settings = getgenv().VergiHub
 local GE = getgenv().VergiHub.GlassEngine
 local P = GE.Palette
-local A = GE.Alpha
 local UI = getgenv().VergiHub._GlassUI
 
 local UserInputService = game:GetService("UserInputService")
@@ -14,7 +14,6 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 
 local createTab = UI.createTab
-local ContentArea = UI.ContentArea
 local tabs = UI.tabs
 local tabPages = UI.tabPages
 
@@ -22,7 +21,6 @@ local tabPages = UI.tabPages
 -- GLASS KONTROL ELEMANLARI
 -- ==========================================
 
--- Section başlığı (cam çizgi ile)
 local function createSection(parent, title)
     local holder = Instance.new("Frame")
     holder.Size = UDim2.new(1, 0, 0, 28)
@@ -30,12 +28,11 @@ local function createSection(parent, title)
     holder.ZIndex = 5
     holder.Parent = parent
 
-    -- Sol cam çizgi
     local line = Instance.new("Frame")
-    line.Size = UDim2.new(0, 18, 0, 1)
+    line.Size = UDim2.new(0, 20, 0, 1)
     line.Position = UDim2.new(0, 0, 0.5, 0)
     line.BackgroundColor3 = P.AccentPrimary
-    line.BackgroundTransparency = 0.5
+    line.BackgroundTransparency = 0.4
     line.BorderSizePixel = 0
     line.ZIndex = 6
     line.Parent = holder
@@ -43,15 +40,15 @@ local function createSection(parent, title)
     local lineGrad = Instance.new("UIGradient")
     lineGrad.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 1),
-        NumberSequenceKeypoint.new(0.5, 0.3),
-        NumberSequenceKeypoint.new(1, 0.3),
+        NumberSequenceKeypoint.new(0.5, 0.2),
+        NumberSequenceKeypoint.new(1, 0.2),
     })
     lineGrad.Parent = line
 
     local label = Instance.new("TextLabel")
     label.Text = string.upper(title)
-    label.Size = UDim2.new(1, -26, 1, 0)
-    label.Position = UDim2.new(0, 24, 0, 0)
+    label.Size = UDim2.new(1, -28, 1, 0)
+    label.Position = UDim2.new(0, 26, 0, 0)
     label.BackgroundTransparency = 1
     label.TextColor3 = P.TextMuted
     label.TextSize = 10
@@ -63,23 +60,19 @@ local function createSection(parent, title)
     return holder
 end
 
--- Glass Toggle
 local function createToggle(parent, label, default, callback)
-    local glassCard = GE.createGlassPanel(parent, {
-        Name = "Toggle_" .. label,
-        Size = UDim2.new(1, 0, 0, 40),
+    local glass = GE.createGlassPanel(parent, {
+        Size = UDim2.new(1, 0, 0, 42),
         Color = P.GlassSurface,
-        Transparency = A.GlassSurface,
+        Transparency = 0.40,
         Corner = 12,
         ZIndex = 5,
     })
+    local holder = glass.Container
 
-    local holder = glassCard.Container
-
-    -- Label
     local text = Instance.new("TextLabel")
     text.Text = label
-    text.Size = UDim2.new(1, -70, 1, 0)
+    text.Size = UDim2.new(1, -72, 1, 0)
     text.Position = UDim2.new(0, 14, 0, 0)
     text.BackgroundTransparency = 1
     text.TextColor3 = P.TextOnGlass
@@ -89,57 +82,47 @@ local function createToggle(parent, label, default, callback)
     text.ZIndex = 7
     text.Parent = holder
 
-    -- Toggle track (cam pill)
     local trackBG = Instance.new("Frame")
-    trackBG.Size = UDim2.new(0, 42, 0, 22)
-    trackBG.Position = UDim2.new(1, -54, 0.5, -11)
+    trackBG.Size = UDim2.new(0, 44, 0, 24)
+    trackBG.Position = UDim2.new(1, -56, 0.5, -12)
     trackBG.BackgroundColor3 = default and P.ToggleOn or P.ToggleOff
-    trackBG.BackgroundTransparency = default and 0.25 or 0.35
+    trackBG.BackgroundTransparency = default and 0.2 or 0.3
     trackBG.BorderSizePixel = 0
     trackBG.ZIndex = 7
     trackBG.Parent = holder
 
-    local trackCnr = Instance.new("UICorner")
-    trackCnr.CornerRadius = UDim.new(1, 0)
-    trackCnr.Parent = trackBG
+    Instance.new("UICorner", trackBG).CornerRadius = UDim.new(1, 0)
 
     local trackStroke = Instance.new("UIStroke")
     trackStroke.Color = default and P.AccentGlow or P.BorderGlass
     trackStroke.Thickness = 1
-    trackStroke.Transparency = default and 0.5 or 0.7
+    trackStroke.Transparency = default and 0.45 or 0.65
     trackStroke.Parent = trackBG
 
-    -- Toggle knob (cam daire)
     local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 18, 0, 18)
-    knob.Position = default and UDim2.new(1, -20, 0.5, -9) or UDim2.new(0, 2, 0.5, -9)
+    knob.Size = UDim2.new(0, 20, 0, 20)
+    knob.Position = default and UDim2.new(1, -22, 0.5, -10) or UDim2.new(0, 2, 0.5, -10)
     knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    knob.BackgroundTransparency = 0.05
+    knob.BackgroundTransparency = 0.02
     knob.BorderSizePixel = 0
     knob.ZIndex = 8
     knob.Parent = trackBG
 
-    local knobCnr = Instance.new("UICorner")
-    knobCnr.CornerRadius = UDim.new(1, 0)
-    knobCnr.Parent = knob
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
-    -- Knob içi frost
-    local knobFrost = Instance.new("Frame")
-    knobFrost.Size = UDim2.new(1, -4, 0.5, 0)
-    knobFrost.Position = UDim2.new(0, 2, 0, 1)
-    knobFrost.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    knobFrost.BackgroundTransparency = 0.7
-    knobFrost.BorderSizePixel = 0
-    knobFrost.ZIndex = 9
-    knobFrost.Parent = knob
-
-    local kfCnr = Instance.new("UICorner")
-    kfCnr.CornerRadius = UDim.new(1, 0)
-    kfCnr.Parent = knobFrost
+    -- Knob frost
+    local kFrost = Instance.new("Frame")
+    kFrost.Size = UDim2.new(1, -4, 0.45, 0)
+    kFrost.Position = UDim2.new(0, 2, 0, 1)
+    kFrost.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    kFrost.BackgroundTransparency = 0.65
+    kFrost.BorderSizePixel = 0
+    kFrost.ZIndex = 9
+    kFrost.Parent = knob
+    Instance.new("UICorner", kFrost).CornerRadius = UDim.new(1, 0)
 
     local state = default
 
-    -- Tıklama
     local clickBtn = Instance.new("TextButton")
     clickBtn.Size = UDim2.new(1, 0, 1, 0)
     clickBtn.BackgroundTransparency = 1
@@ -148,50 +131,44 @@ local function createToggle(parent, label, default, callback)
     clickBtn.Parent = holder
 
     clickBtn.MouseEnter:Connect(function()
-        GE.tween(glassCard.Background, {BackgroundTransparency = A.GlassSurface - 0.08}, 0.12)
-        GE.tween(glassCard.Stroke, {Transparency = 0.4}, 0.12)
+        GE.tween(glass.Background, {BackgroundTransparency = 0.30}, 0.1)
+        GE.tween(glass.Stroke, {Transparency = 0.4}, 0.1)
     end)
     clickBtn.MouseLeave:Connect(function()
-        GE.tween(glassCard.Background, {BackgroundTransparency = A.GlassSurface}, 0.2)
-        GE.tween(glassCard.Stroke, {Transparency = A.BorderGlow}, 0.2)
+        GE.tween(glass.Background, {BackgroundTransparency = 0.40}, 0.15)
+        GE.tween(glass.Stroke, {Transparency = 0.6}, 0.15)
     end)
 
     clickBtn.MouseButton1Click:Connect(function()
         state = not state
-
         if state then
-            GE.tween(trackBG, {BackgroundColor3 = P.ToggleOn, BackgroundTransparency = 0.25}, 0.25)
-            GE.tween(knob, {Position = UDim2.new(1, -20, 0.5, -9)}, 0.25)
-            GE.tween(trackStroke, {Color = P.AccentGlow, Transparency = 0.5}, 0.25)
+            GE.tween(trackBG, {BackgroundColor3 = P.ToggleOn, BackgroundTransparency = 0.2}, 0.25)
+            GE.tween(knob, {Position = UDim2.new(1, -22, 0.5, -10)}, 0.25)
+            GE.tween(trackStroke, {Color = P.AccentGlow, Transparency = 0.45}, 0.25)
         else
-            GE.tween(trackBG, {BackgroundColor3 = P.ToggleOff, BackgroundTransparency = 0.35}, 0.25)
-            GE.tween(knob, {Position = UDim2.new(0, 2, 0.5, -9)}, 0.25)
-            GE.tween(trackStroke, {Color = P.BorderGlass, Transparency = 0.7}, 0.25)
+            GE.tween(trackBG, {BackgroundColor3 = P.ToggleOff, BackgroundTransparency = 0.3}, 0.25)
+            GE.tween(knob, {Position = UDim2.new(0, 2, 0.5, -10)}, 0.25)
+            GE.tween(trackStroke, {Color = P.BorderGlass, Transparency = 0.65}, 0.25)
         end
-
         if callback then callback(state) end
     end)
 
     return holder
 end
 
--- Glass Slider
 local function createSlider(parent, label, min, max, default, callback)
-    local glassCard = GE.createGlassPanel(parent, {
-        Name = "Slider_" .. label,
-        Size = UDim2.new(1, 0, 0, 56),
+    local glass = GE.createGlassPanel(parent, {
+        Size = UDim2.new(1, 0, 0, 58),
         Color = P.GlassSurface,
-        Transparency = A.GlassSurface,
+        Transparency = 0.40,
         Corner = 12,
         ZIndex = 5,
     })
+    local holder = glass.Container
 
-    local holder = glassCard.Container
-
-    -- Label
     local text = Instance.new("TextLabel")
     text.Text = label
-    text.Size = UDim2.new(0.62, 0, 0, 24)
+    text.Size = UDim2.new(0.6, 0, 0, 26)
     text.Position = UDim2.new(0, 14, 0, 4)
     text.BackgroundTransparency = 1
     text.TextColor3 = P.TextOnGlass
@@ -201,24 +178,21 @@ local function createSlider(parent, label, min, max, default, callback)
     text.ZIndex = 7
     text.Parent = holder
 
-    -- Değer cam badge
     local valBadge = Instance.new("Frame")
-    valBadge.Size = UDim2.new(0, 48, 0, 22)
-    valBadge.Position = UDim2.new(1, -58, 0, 5)
+    valBadge.Size = UDim2.new(0, 50, 0, 22)
+    valBadge.Position = UDim2.new(1, -60, 0, 6)
     valBadge.BackgroundColor3 = P.GlassInput
-    valBadge.BackgroundTransparency = 0.4
+    valBadge.BackgroundTransparency = 0.35
     valBadge.BorderSizePixel = 0
     valBadge.ZIndex = 7
     valBadge.Parent = holder
 
-    local vbCnr = Instance.new("UICorner")
-    vbCnr.CornerRadius = UDim.new(0, 6)
-    vbCnr.Parent = valBadge
+    Instance.new("UICorner", valBadge).CornerRadius = UDim.new(0, 6)
 
     local vbStroke = Instance.new("UIStroke")
     vbStroke.Color = P.BorderGlass
     vbStroke.Thickness = 1
-    vbStroke.Transparency = 0.75
+    vbStroke.Transparency = 0.7
     vbStroke.Parent = valBadge
 
     local valLbl = Instance.new("TextLabel")
@@ -231,73 +205,62 @@ local function createSlider(parent, label, min, max, default, callback)
     valLbl.ZIndex = 8
     valLbl.Parent = valBadge
 
-    -- Slider track (cam)
     local track = Instance.new("Frame")
-    track.Size = UDim2.new(1, -28, 0, 6)
-    track.Position = UDim2.new(0, 14, 0, 39)
+    track.Size = UDim2.new(1, -28, 0, 8)
+    track.Position = UDim2.new(0, 14, 0, 40)
     track.BackgroundColor3 = P.SliderTrack
-    track.BackgroundTransparency = 0.3
+    track.BackgroundTransparency = 0.25
     track.BorderSizePixel = 0
     track.ZIndex = 7
     track.Parent = holder
 
-    local trackCnr = Instance.new("UICorner")
-    trackCnr.CornerRadius = UDim.new(1, 0)
-    trackCnr.Parent = track
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
 
-    -- Fill (gradient cam)
     local pct = math.clamp((default - min) / (max - min), 0, 1)
 
     local fill = Instance.new("Frame")
     fill.Size = UDim2.new(pct, 0, 1, 0)
     fill.BackgroundColor3 = P.SliderFill
-    fill.BackgroundTransparency = 0.15
+    fill.BackgroundTransparency = 0.1
     fill.BorderSizePixel = 0
     fill.ZIndex = 8
     fill.Parent = track
 
-    local fillCnr = Instance.new("UICorner")
-    fillCnr.CornerRadius = UDim.new(1, 0)
-    fillCnr.Parent = fill
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
-    -- Fill gradient (cam efekti)
     local fillGrad = Instance.new("UIGradient")
     fillGrad.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, P.AccentCyan),
         ColorSequenceKeypoint.new(1, P.AccentPrimary),
     })
     fillGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.3),
-        NumberSequenceKeypoint.new(0.5, 0.1),
-        NumberSequenceKeypoint.new(1, 0.25),
+        NumberSequenceKeypoint.new(0, 0.25),
+        NumberSequenceKeypoint.new(0.5, 0.05),
+        NumberSequenceKeypoint.new(1, 0.2),
     })
     fillGrad.Parent = fill
 
-    -- Knob (cam daire)
     local sKnob = Instance.new("Frame")
-    sKnob.Size = UDim2.new(0, 16, 0, 16)
-    sKnob.Position = UDim2.new(pct, -8, 0.5, -8)
+    sKnob.Size = UDim2.new(0, 18, 0, 18)
+    sKnob.Position = UDim2.new(pct, -9, 0.5, -9)
     sKnob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    sKnob.BackgroundTransparency = 0.05
+    sKnob.BackgroundTransparency = 0.02
     sKnob.BorderSizePixel = 0
     sKnob.ZIndex = 9
     sKnob.Parent = track
 
-    local skCnr = Instance.new("UICorner")
-    skCnr.CornerRadius = UDim.new(1, 0)
-    skCnr.Parent = sKnob
+    Instance.new("UICorner", sKnob).CornerRadius = UDim.new(1, 0)
 
     local skStroke = Instance.new("UIStroke")
     skStroke.Color = P.AccentPrimary
     skStroke.Thickness = 2
-    skStroke.Transparency = 0.3
+    skStroke.Transparency = 0.2
     skStroke.Parent = sKnob
 
-    -- Etkileşim
     local sliding = false
 
     local sliderBtn = Instance.new("TextButton")
-    sliderBtn.Size = UDim2.new(1, 10, 0, 26)
+    sliderBtn.Size = UDim2.new(1, 10, 0, 28)
     sliderBtn.Position = UDim2.new(0, -5, 0, 28)
     sliderBtn.BackgroundTransparency = 1
     sliderBtn.Text = ""
@@ -307,8 +270,8 @@ local function createSlider(parent, label, min, max, default, callback)
     sliderBtn.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             sliding = true
-            GE.tween(sKnob, {Size = UDim2.new(0, 20, 0, 20)}, 0.1)
-            GE.tween(skStroke, {Transparency = 0.1}, 0.1)
+            GE.tween(sKnob, {Size = UDim2.new(0, 22, 0, 22)}, 0.08)
+            GE.tween(skStroke, {Transparency = 0}, 0.08)
         end
     end)
 
@@ -316,8 +279,8 @@ local function createSlider(parent, label, min, max, default, callback)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
             sliding = false
             local cs = fill.Size.X.Scale
-            GE.tween(sKnob, {Size = UDim2.new(0, 16, 0, 16), Position = UDim2.new(cs, -8, 0.5, -8)}, 0.1)
-            GE.tween(skStroke, {Transparency = 0.3}, 0.1)
+            GE.tween(sKnob, {Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(cs, -9, 0.5, -9)}, 0.1)
+            GE.tween(skStroke, {Transparency = 0.2}, 0.1)
         end
     end)
 
@@ -328,7 +291,7 @@ local function createSlider(parent, label, min, max, default, callback)
             local val = math.floor(min + (max - min) * rel)
             valLbl.Text = tostring(val)
             fill.Size = UDim2.new(rel, 0, 1, 0)
-            sKnob.Position = UDim2.new(rel, -10, 0.5, -10)
+            sKnob.Position = UDim2.new(rel, -11, 0.5, -11)
             if callback then callback(val) end
         end
     end)
@@ -336,25 +299,22 @@ local function createSlider(parent, label, min, max, default, callback)
     return holder
 end
 
--- Glass Dropdown
 local function createDropdown(parent, label, options, default, callback)
     local isOpen = false
 
-    local glassCard = GE.createGlassPanel(parent, {
-        Name = "DD_" .. label,
-        Size = UDim2.new(1, 0, 0, 40),
+    local glass = GE.createGlassPanel(parent, {
+        Size = UDim2.new(1, 0, 0, 42),
         Color = P.GlassSurface,
-        Transparency = A.GlassSurface,
+        Transparency = 0.40,
         Corner = 12,
         ZIndex = 5,
     })
-
-    local holder = glassCard.Container
+    local holder = glass.Container
     holder.ClipsDescendants = true
 
     local text = Instance.new("TextLabel")
     text.Text = label
-    text.Size = UDim2.new(0.5, 0, 0, 40)
+    text.Size = UDim2.new(0.5, 0, 0, 42)
     text.Position = UDim2.new(0, 14, 0, 0)
     text.BackgroundTransparency = 1
     text.TextColor3 = P.TextOnGlass
@@ -364,13 +324,12 @@ local function createDropdown(parent, label, options, default, callback)
     text.ZIndex = 7
     text.Parent = holder
 
-    -- Seçili değer (cam buton)
     local selBtn = Instance.new("TextButton")
     selBtn.Text = tostring(default) .. "  ▾"
-    selBtn.Size = UDim2.new(0.42, -12, 0, 30)
+    selBtn.Size = UDim2.new(0.42, -12, 0, 32)
     selBtn.Position = UDim2.new(0.58, 0, 0, 5)
     selBtn.BackgroundColor3 = P.GlassInput
-    selBtn.BackgroundTransparency = 0.4
+    selBtn.BackgroundTransparency = 0.35
     selBtn.TextColor3 = P.AccentSecondary
     selBtn.TextSize = 12
     selBtn.Font = Enum.Font.GothamSemibold
@@ -379,25 +338,22 @@ local function createDropdown(parent, label, options, default, callback)
     selBtn.ZIndex = 7
     selBtn.Parent = holder
 
-    local selCnr = Instance.new("UICorner")
-    selCnr.CornerRadius = UDim.new(0, 8)
-    selCnr.Parent = selBtn
+    Instance.new("UICorner", selBtn).CornerRadius = UDim.new(0, 8)
 
     local selStroke = Instance.new("UIStroke")
     selStroke.Color = P.BorderGlass
     selStroke.Thickness = 1
-    selStroke.Transparency = 0.7
+    selStroke.Transparency = 0.65
     selStroke.Parent = selBtn
 
-    -- Seçenekler
     local optBtns = {}
     for i, opt in ipairs(options) do
         local ob = Instance.new("TextButton")
         ob.Text = tostring(opt)
-        ob.Size = UDim2.new(0.42, -12, 0, 28)
-        ob.Position = UDim2.new(0.58, 0, 0, 5 + i * 32)
+        ob.Size = UDim2.new(0.42, -12, 0, 30)
+        ob.Position = UDim2.new(0.58, 0, 0, 5 + i * 34)
         ob.BackgroundColor3 = P.GlassInput
-        ob.BackgroundTransparency = 0.45
+        ob.BackgroundTransparency = 0.4
         ob.TextColor3 = P.TextSecondary
         ob.TextSize = 11
         ob.Font = Enum.Font.Gotham
@@ -407,21 +363,19 @@ local function createDropdown(parent, label, options, default, callback)
         ob.ZIndex = 8
         ob.Parent = holder
 
-        local oCnr = Instance.new("UICorner")
-        oCnr.CornerRadius = UDim.new(0, 7)
-        oCnr.Parent = ob
+        Instance.new("UICorner", ob).CornerRadius = UDim.new(0, 7)
 
         ob.MouseEnter:Connect(function()
-            GE.tween(ob, {BackgroundTransparency = 0.25, TextColor3 = P.AccentSecondary}, 0.12)
+            GE.tween(ob, {BackgroundTransparency = 0.2, TextColor3 = P.AccentSecondary}, 0.1)
         end)
         ob.MouseLeave:Connect(function()
-            GE.tween(ob, {BackgroundTransparency = 0.45, TextColor3 = P.TextSecondary}, 0.12)
+            GE.tween(ob, {BackgroundTransparency = 0.4, TextColor3 = P.TextSecondary}, 0.1)
         end)
 
         ob.MouseButton1Click:Connect(function()
             selBtn.Text = tostring(opt) .. "  ▾"
             isOpen = false
-            GE.tween(holder, {Size = UDim2.new(1, 0, 0, 40)}, 0.2)
+            GE.tween(holder, {Size = UDim2.new(1, 0, 0, 42)}, 0.2)
             for _, b in pairs(optBtns) do b.Visible = false end
             if callback then callback(opt) end
         end)
@@ -432,10 +386,10 @@ local function createDropdown(parent, label, options, default, callback)
     selBtn.MouseButton1Click:Connect(function()
         isOpen = not isOpen
         if isOpen then
-            GE.tween(holder, {Size = UDim2.new(1, 0, 0, 40 + #options * 32 + 6)}, 0.2)
+            GE.tween(holder, {Size = UDim2.new(1, 0, 0, 42 + #options * 34 + 8)}, 0.2)
             for _, b in pairs(optBtns) do b.Visible = true end
         else
-            GE.tween(holder, {Size = UDim2.new(1, 0, 0, 40)}, 0.2)
+            GE.tween(holder, {Size = UDim2.new(1, 0, 0, 42)}, 0.2)
             for _, b in pairs(optBtns) do b.Visible = false end
         end
     end)
@@ -447,7 +401,7 @@ end
 -- TAB 1: AIMBOT
 -- ==========================================
 
-local aimbotPage = createTab("Aimbot", TAB_ICONS.Aimbot)
+local aimbotPage = createTab("Aimbot", "◎")
 
 createSection(aimbotPage, "General")
 createToggle(aimbotPage, "Aimbot", false, function(s) Settings.Aimbot.Enabled = s end)
@@ -463,14 +417,14 @@ createSlider(aimbotPage, "Max Distance", 100, 2000, 500, function(v) Settings.Ai
 
 createSection(aimbotPage, "Ballistics")
 createToggle(aimbotPage, "Movement Prediction", false, function(s) Settings.Aimbot.Prediction = s end)
-createSlider(aimbotPage, "Prediction Amount (x1000)", 50, 500, 165, function(v) Settings.Aimbot.PredictionAmount = v / 1000 end)
+createSlider(aimbotPage, "Prediction (x1000)", 50, 500, 165, function(v) Settings.Aimbot.PredictionAmount = v / 1000 end)
 createDropdown(aimbotPage, "Target Part", {"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso"}, "Head", function(v) Settings.Aimbot.TargetPart = v end)
 
 -- ==========================================
 -- TAB 2: ESP
 -- ==========================================
 
-local espPage = createTab("ESP", TAB_ICONS.ESP)
+local espPage = createTab("ESP", "◈")
 
 createSection(espPage, "General")
 createToggle(espPage, "ESP", false, function(s) Settings.ESP.Enabled = s end)
@@ -495,7 +449,7 @@ createSlider(espPage, "Max ESP Distance", 100, 3000, 1000, function(v) Settings.
 -- TAB 3: HARDLOCK
 -- ==========================================
 
-local hardlockPage = createTab("HardLock", TAB_ICONS.HardLock)
+local hardlockPage = createTab("HardLock", "⊕")
 
 createSection(hardlockPage, "General")
 createToggle(hardlockPage, "HardLock", false, function(s) Settings.HardLock.Enabled = s end)
@@ -514,28 +468,27 @@ createSection(hardlockPage, "Rage")
 createToggle(hardlockPage, "Auto Fire", false, function(s) Settings.HardLock.AutoFire = s end)
 createSlider(hardlockPage, "Rage Prediction (x1000)", 50, 400, 200, function(v) Settings.HardLock.RagePrediction = v / 1000 end)
 
--- Mode bilgi kartı
+-- Mode info
 createSection(hardlockPage, "Mode Info")
-
 local modeInfoGlass = GE.createGlassPanel(hardlockPage, {
-    Size = UDim2.new(1, 0, 0, 110),
+    Size = UDim2.new(1, 0, 0, 115),
     Color = P.GlassInput,
-    Transparency = 0.45,
+    Transparency = 0.40,
     Corner = 12,
     ZIndex = 5,
 })
 
-local modeLines = {
-    {label = "Snap", desc = "Instant lock every frame", color = P.Success},
-    {label = "Flick", desc = "Fast snap then smooth track", color = P.Warning},
-    {label = "Rage", desc = "Full override + auto fire", color = P.Error},
-    {label = "Silent", desc = "Camera stays, server gets aim", color = P.Info},
+local modeData = {
+    {l = "Snap", d = "Instant lock every frame", c = P.Success},
+    {l = "Flick", d = "Fast snap then smooth track", c = P.Warning},
+    {l = "Rage", d = "Full override + auto fire", c = P.Error},
+    {l = "Silent", d = "Camera stays, server gets aim", c = P.Info},
 }
 
-for i, info in ipairs(modeLines) do
+for i, m in ipairs(modeData) do
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -20, 0, 22)
-    row.Position = UDim2.new(0, 10, 0, 6 + (i - 1) * 25)
+    row.Size = UDim2.new(1, -20, 0, 24)
+    row.Position = UDim2.new(0, 10, 0, 6 + (i-1) * 26)
     row.BackgroundTransparency = 1
     row.ZIndex = 6
     row.Parent = modeInfoGlass.Container
@@ -543,18 +496,18 @@ for i, info in ipairs(modeLines) do
     local dot = Instance.new("Frame")
     dot.Size = UDim2.new(0, 6, 0, 6)
     dot.Position = UDim2.new(0, 0, 0.5, -3)
-    dot.BackgroundColor3 = info.color
+    dot.BackgroundColor3 = m.c
     dot.BorderSizePixel = 0
     dot.ZIndex = 7
     dot.Parent = row
     Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
 
     local lbl = Instance.new("TextLabel")
-    lbl.Text = info.label
-    lbl.Size = UDim2.new(0, 45, 1, 0)
+    lbl.Text = m.l
+    lbl.Size = UDim2.new(0, 48, 1, 0)
     lbl.Position = UDim2.new(0, 12, 0, 0)
     lbl.BackgroundTransparency = 1
-    lbl.TextColor3 = info.color
+    lbl.TextColor3 = m.c
     lbl.TextSize = 11
     lbl.Font = Enum.Font.GothamBold
     lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -562,9 +515,9 @@ for i, info in ipairs(modeLines) do
     lbl.Parent = row
 
     local desc = Instance.new("TextLabel")
-    desc.Text = info.desc
-    desc.Size = UDim2.new(1, -65, 1, 0)
-    desc.Position = UDim2.new(0, 62, 0, 0)
+    desc.Text = m.d
+    desc.Size = UDim2.new(1, -68, 1, 0)
+    desc.Position = UDim2.new(0, 65, 0, 0)
     desc.BackgroundTransparency = 1
     desc.TextColor3 = P.TextSecondary
     desc.TextSize = 10
@@ -578,7 +531,7 @@ end
 -- TAB 4: BYPASS
 -- ==========================================
 
-local bypassPage = createTab("Bypass", TAB_ICONS.Bypass)
+local bypassPage = createTab("Bypass", "◆")
 
 createSection(bypassPage, "Protection Layers")
 createToggle(bypassPage, "Ring 1 — Byfron / Hyperion", false, function(s) Settings.Bypass.Ring1 = s end)
@@ -587,45 +540,44 @@ createToggle(bypassPage, "Ring 3 — ESP / Aimbot Stealth", false, function(s) S
 createToggle(bypassPage, "Ring 4 — Basic Protection", false, function(s) Settings.Bypass.Ring4 = s end)
 
 createSection(bypassPage, "Layer Info")
-
-local bypassInfoGlass = GE.createGlassPanel(bypassPage, {
-    Size = UDim2.new(1, 0, 0, 120),
+local bpInfoGlass = GE.createGlassPanel(bypassPage, {
+    Size = UDim2.new(1, 0, 0, 125),
     Color = P.GlassInput,
-    Transparency = 0.45,
+    Transparency = 0.40,
     Corner = 12,
     ZIndex = 5,
 })
 
-local bypassLines = {
-    {label = "Ring 1", desc = "Byfron memory, heartbeat, environment", color = P.Error},
-    {label = "Ring 2", desc = "Remote throttle, camera guard, humanize", color = P.Warning},
-    {label = "Ring 3", desc = "Aim noise, drawing stealth, raycast", color = Color3.fromRGB(167, 139, 250)},
-    {label = "Ring 4", desc = "Speed guard, teleport, FPS, anti-idle", color = P.Success},
+local bpData = {
+    {l = "Ring 1", d = "Byfron memory, heartbeat, environment", c = P.Error},
+    {l = "Ring 2", d = "Remote throttle, camera guard, humanize", c = P.Warning},
+    {l = "Ring 3", d = "Aim noise, drawing stealth, raycast", c = Color3.fromRGB(167, 139, 250)},
+    {l = "Ring 4", d = "Speed guard, teleport, FPS, anti-idle", c = P.Success},
 }
 
-for i, info in ipairs(bypassLines) do
+for i, b in ipairs(bpData) do
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -20, 0, 24)
-    row.Position = UDim2.new(0, 10, 0, 6 + (i - 1) * 28)
+    row.Size = UDim2.new(1, -20, 0, 26)
+    row.Position = UDim2.new(0, 10, 0, 6 + (i-1) * 28)
     row.BackgroundTransparency = 1
     row.ZIndex = 6
-    row.Parent = bypassInfoGlass.Container
+    row.Parent = bpInfoGlass.Container
 
     local dot = Instance.new("Frame")
     dot.Size = UDim2.new(0, 6, 0, 6)
     dot.Position = UDim2.new(0, 0, 0.5, -3)
-    dot.BackgroundColor3 = info.color
+    dot.BackgroundColor3 = b.c
     dot.BorderSizePixel = 0
     dot.ZIndex = 7
     dot.Parent = row
     Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
 
     local lbl = Instance.new("TextLabel")
-    lbl.Text = info.label
-    lbl.Size = UDim2.new(0, 45, 1, 0)
+    lbl.Text = b.l
+    lbl.Size = UDim2.new(0, 48, 1, 0)
     lbl.Position = UDim2.new(0, 12, 0, 0)
     lbl.BackgroundTransparency = 1
-    lbl.TextColor3 = info.color
+    lbl.TextColor3 = b.c
     lbl.TextSize = 11
     lbl.Font = Enum.Font.GothamBold
     lbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -633,9 +585,9 @@ for i, info in ipairs(bypassLines) do
     lbl.Parent = row
 
     local desc = Instance.new("TextLabel")
-    desc.Text = info.desc
-    desc.Size = UDim2.new(1, -65, 1, 0)
-    desc.Position = UDim2.new(0, 62, 0, 0)
+    desc.Text = b.d
+    desc.Size = UDim2.new(1, -68, 1, 0)
+    desc.Position = UDim2.new(0, 65, 0, 0)
     desc.BackgroundTransparency = 1
     desc.TextColor3 = P.TextSecondary
     desc.TextSize = 10
@@ -645,52 +597,51 @@ for i, info in ipairs(bypassLines) do
     desc.Parent = row
 end
 
--- Uyarı kartı (cam)
+-- Uyari
 createSection(bypassPage, "Notice")
-
 local warnGlass = GE.createGlassPanel(bypassPage, {
-    Size = UDim2.new(1, 0, 0, 52),
+    Size = UDim2.new(1, 0, 0, 54),
     Color = Color3.fromRGB(30, 25, 12),
-    Transparency = 0.35,
+    Transparency = 0.30,
     Corner = 12,
     ZIndex = 5,
 })
 
-local warnAccent = Instance.new("Frame")
-warnAccent.Size = UDim2.new(0, 3, 1, -12)
-warnAccent.Position = UDim2.new(0, 5, 0, 6)
-warnAccent.BackgroundColor3 = P.Warning
-warnAccent.BorderSizePixel = 0
-warnAccent.ZIndex = 7
-warnAccent.Parent = warnGlass.Container
-Instance.new("UICorner", warnAccent).CornerRadius = UDim.new(0, 2)
+local wAccent = Instance.new("Frame")
+wAccent.Size = UDim2.new(0, 3, 1, -14)
+wAccent.Position = UDim2.new(0, 6, 0, 7)
+wAccent.BackgroundColor3 = P.Warning
+wAccent.BorderSizePixel = 0
+wAccent.ZIndex = 7
+wAccent.Parent = warnGlass.Container
+Instance.new("UICorner", wAccent).CornerRadius = UDim.new(0, 2)
 
-local warnText = Instance.new("TextLabel")
-warnText.Text = "Higher rings provide more protection but may impact performance. Ring 1 requires compatible executor."
-warnText.Size = UDim2.new(1, -24, 1, -8)
-warnText.Position = UDim2.new(0, 16, 0, 4)
-warnText.BackgroundTransparency = 1
-warnText.TextColor3 = Color3.fromRGB(230, 210, 150)
-warnText.TextSize = 11
-warnText.Font = Enum.Font.Gotham
-warnText.TextWrapped = true
-warnText.TextXAlignment = Enum.TextXAlignment.Left
-warnText.TextYAlignment = Enum.TextYAlignment.Top
-warnText.ZIndex = 7
-warnText.Parent = warnGlass.Container
+local wText = Instance.new("TextLabel")
+wText.Text = "Higher rings = more protection but may impact performance. Ring 1 requires compatible executor."
+wText.Size = UDim2.new(1, -26, 1, -10)
+wText.Position = UDim2.new(0, 18, 0, 5)
+wText.BackgroundTransparency = 1
+wText.TextColor3 = Color3.fromRGB(230, 210, 150)
+wText.TextSize = 11
+wText.Font = Enum.Font.Gotham
+wText.TextWrapped = true
+wText.TextXAlignment = Enum.TextXAlignment.Left
+wText.TextYAlignment = Enum.TextYAlignment.Top
+wText.ZIndex = 7
+wText.Parent = warnGlass.Container
 
 -- ==========================================
 -- TAB 5: SETTINGS
 -- ==========================================
 
-local settingsPage = createTab("Settings", TAB_ICONS.Settings)
+local settingsPage = createTab("Settings", "⚙")
 
 createSection(settingsPage, "Information")
 
 local infoGlass = GE.createGlassPanel(settingsPage, {
-    Size = UDim2.new(1, 0, 0, 100),
+    Size = UDim2.new(1, 0, 0, 105),
     Color = P.GlassSurface,
-    Transparency = A.GlassSurface,
+    Transparency = 0.40,
     Corner = 12,
     ZIndex = 5,
 })
@@ -700,23 +651,23 @@ pcall(function()
     gameName = game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId).Name
 end)
 
-local infoLines = {
-    {label = "Version", value = Settings.Version, color = P.AccentSecondary},
-    {label = "User", value = LocalPlayer.DisplayName, color = P.TextPrimary},
-    {label = "Game", value = gameName, color = P.TextSecondary},
-    {label = "Toggle Key", value = "RightShift", color = P.TextMuted},
+local infoData = {
+    {l = "Version", v = Settings.Version, c = P.AccentSecondary},
+    {l = "User", v = LocalPlayer.DisplayName, c = P.TextPrimary},
+    {l = "Game", v = gameName, c = P.TextSecondary},
+    {l = "Toggle Key", v = "RightShift", c = P.TextMuted},
 }
 
-for i, info in ipairs(infoLines) do
+for i, info in ipairs(infoData) do
     local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -24, 0, 20)
-    row.Position = UDim2.new(0, 12, 0, 8 + (i - 1) * 22)
+    row.Size = UDim2.new(1, -24, 0, 22)
+    row.Position = UDim2.new(0, 12, 0, 8 + (i-1) * 23)
     row.BackgroundTransparency = 1
     row.ZIndex = 7
     row.Parent = infoGlass.Container
 
     local lbl = Instance.new("TextLabel")
-    lbl.Text = info.label
+    lbl.Text = info.l
     lbl.Size = UDim2.new(0.4, 0, 1, 0)
     lbl.BackgroundTransparency = 1
     lbl.TextColor3 = P.TextMuted
@@ -727,10 +678,10 @@ for i, info in ipairs(infoLines) do
     lbl.Parent = row
 
     local val = Instance.new("TextLabel")
-    val.Text = info.value
+    val.Text = info.v
     val.Size = UDim2.new(0.6, 0, 1, 0)
     val.BackgroundTransparency = 1
-    val.TextColor3 = info.color
+    val.TextColor3 = info.c
     val.TextSize = 12
     val.Font = Enum.Font.GothamSemibold
     val.TextXAlignment = Enum.TextXAlignment.Right
@@ -741,47 +692,50 @@ end
 createSection(settingsPage, "Credits")
 
 local creditGlass = GE.createGlassPanel(settingsPage, {
-    Size = UDim2.new(1, 0, 0, 50),
+    Size = UDim2.new(1, 0, 0, 52),
     Color = P.GlassSurface,
-    Transparency = A.GlassSurface,
+    Transparency = 0.40,
     Corner = 12,
     ZIndex = 5,
     AccentGlow = P.AccentPrimary,
 })
 
-local creditAccent = Instance.new("Frame")
-creditAccent.Size = UDim2.new(0, 3, 1, -12)
-creditAccent.Position = UDim2.new(0, 5, 0, 6)
-creditAccent.BackgroundColor3 = P.AccentPrimary
-creditAccent.BorderSizePixel = 0
-creditAccent.ZIndex = 7
-creditAccent.Parent = creditGlass.Container
-Instance.new("UICorner", creditAccent).CornerRadius = UDim.new(0, 2)
+local cAccent = Instance.new("Frame")
+cAccent.Size = UDim2.new(0, 3, 1, -14)
+cAccent.Position = UDim2.new(0, 6, 0, 7)
+cAccent.BackgroundColor3 = P.AccentPrimary
+cAccent.BorderSizePixel = 0
+cAccent.ZIndex = 7
+cAccent.Parent = creditGlass.Container
+Instance.new("UICorner", cAccent).CornerRadius = UDim.new(0, 2)
 
-local creditText = Instance.new("TextLabel")
-creditText.Text = "Developed by Baran\nVergiHub — Private Use Only"
-creditText.Size = UDim2.new(1, -24, 1, -8)
-creditText.Position = UDim2.new(0, 16, 0, 4)
-creditText.BackgroundTransparency = 1
-creditText.TextColor3 = P.TextSecondary
-creditText.TextSize = 12
-creditText.Font = Enum.Font.Gotham
-creditText.TextWrapped = true
-creditText.TextXAlignment = Enum.TextXAlignment.Left
-creditText.TextYAlignment = Enum.TextYAlignment.Top
-creditText.ZIndex = 7
-creditText.Parent = creditGlass.Container
+local cText = Instance.new("TextLabel")
+cText.Text = "Developed by Baran\nVergiHub — Private Use Only"
+cText.Size = UDim2.new(1, -26, 1, -10)
+cText.Position = UDim2.new(0, 18, 0, 5)
+cText.BackgroundTransparency = 1
+cText.TextColor3 = P.TextSecondary
+cText.TextSize = 12
+cText.Font = Enum.Font.Gotham
+cText.TextWrapped = true
+cText.TextXAlignment = Enum.TextXAlignment.Left
+cText.TextYAlignment = Enum.TextYAlignment.Top
+cText.ZIndex = 7
+cText.Parent = creditGlass.Container
 
 -- ==========================================
--- İLK TAB AKTİF ET
+-- İLK TAB AKTİF (BUG FIX)
 -- ==========================================
 
+-- Aimbot tabini programatik olarak aktif et
 local firstTab = tabs["Aimbot"]
-firstTab.Button.BackgroundTransparency = 0.55
-firstTab.ActiveBar.BackgroundTransparency = 0.15
-firstTab.Icon.TextColor3 = P.AccentSecondary
-firstTab.Name.TextColor3 = P.TextPrimary
-tabPages["Aimbot"].Visible = true
+if firstTab then
+    firstTab.Button.BackgroundTransparency = 0.45
+    firstTab.ActiveBar.BackgroundTransparency = 0.1
+    firstTab.Icon.TextColor3 = P.AccentSecondary
+    firstTab.Name.TextColor3 = P.TextPrimary
+    tabPages["Aimbot"].Visible = true
+end
 
-print("[VergiHub] Liquid Glass Controls & Tabs hazir!")
+print("[VergiHub] Liquid Glass Controls & Tabs v2.0 hazir!")
 return true
