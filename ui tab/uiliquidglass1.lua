@@ -1,40 +1,39 @@
 --[[
-    VergiHub - Liquid Glass Engine v1.0
+    VergiHub - Liquid Glass Engine v2.0
     iOS 26 Liquid Glass efekt sistemi
     
-    Frosted glass, blur simulation, inner glow,
-    refraction edges, depth shadows
-    
-    Bu modül diğer UI dosyaları tarafından kullanılır.
+    Gercek cam hissi: coklu frost katman, refraction,
+    depth glow, specular highlight, edge light
 ]]
 
 local TweenService = game:GetService("TweenService")
 
--- Glass Engine modülü
 local GlassEngine = {}
 
 -- ==========================================
--- RENK PALETTESİ (Liquid Glass)
+-- RENK PALETTESİ
 -- ==========================================
 
 GlassEngine.Palette = {
-    -- Cam arka planları (çok düşük opaklık)
-    GlassPrimary     = Color3.fromRGB(30, 30, 50),      -- Ana cam
-    GlassSurface     = Color3.fromRGB(25, 25, 42),      -- Kart yüzeyi
-    GlassElevated    = Color3.fromRGB(35, 35, 55),      -- Yükseltilmiş cam
-    GlassInput       = Color3.fromRGB(20, 20, 38),      -- Input alanları
+    -- Cam arka planlar
+    GlassPrimary     = Color3.fromRGB(20, 20, 40),
+    GlassSurface     = Color3.fromRGB(25, 25, 48),
+    GlassElevated    = Color3.fromRGB(32, 32, 58),
+    GlassInput       = Color3.fromRGB(18, 18, 38),
+    GlassDeep        = Color3.fromRGB(10, 10, 24),
 
-    -- Frosted katmanlar
-    FrostLight       = Color3.fromRGB(200, 200, 230),    -- Açık frost
-    FrostMedium      = Color3.fromRGB(140, 140, 170),    -- Orta frost
-    FrostDark        = Color3.fromRGB(80, 80, 110),      -- Koyu frost
+    -- Frost
+    FrostWhite       = Color3.fromRGB(220, 225, 255),
+    FrostBlue        = Color3.fromRGB(150, 170, 230),
+    FrostPurple      = Color3.fromRGB(160, 140, 220),
 
-    -- Accent (ışık kırılması efekti)
-    AccentPrimary    = Color3.fromRGB(120, 80, 255),     -- Ana mor
-    AccentSecondary  = Color3.fromRGB(160, 120, 255),    -- Açık mor
-    AccentGlow       = Color3.fromRGB(180, 150, 255),    -- Glow mor
-    AccentCyan       = Color3.fromRGB(80, 200, 255),     -- Cam kırılma mavisi
-    AccentPink       = Color3.fromRGB(255, 100, 200),    -- Sıcak kırılma
+    -- Accent
+    AccentPrimary    = Color3.fromRGB(120, 80, 255),
+    AccentSecondary  = Color3.fromRGB(160, 120, 255),
+    AccentGlow       = Color3.fromRGB(180, 150, 255),
+    AccentCyan       = Color3.fromRGB(80, 200, 255),
+    AccentPink       = Color3.fromRGB(255, 100, 200),
+    AccentWhite      = Color3.fromRGB(230, 235, 255),
 
     -- Durum
     Success          = Color3.fromRGB(60, 220, 160),
@@ -42,56 +41,34 @@ GlassEngine.Palette = {
     Warning          = Color3.fromRGB(255, 200, 60),
     Info             = Color3.fromRGB(100, 180, 255),
 
-    -- Yazı
-    TextPrimary      = Color3.fromRGB(240, 240, 255),
-    TextSecondary    = Color3.fromRGB(180, 180, 210),
-    TextMuted        = Color3.fromRGB(120, 120, 155),
-    TextOnGlass      = Color3.fromRGB(220, 220, 245),
+    -- Yazi
+    TextPrimary      = Color3.fromRGB(240, 242, 255),
+    TextSecondary    = Color3.fromRGB(175, 180, 215),
+    TextMuted        = Color3.fromRGB(110, 115, 150),
+    TextOnGlass      = Color3.fromRGB(225, 228, 250),
 
     -- Kontrol
     ToggleOn         = Color3.fromRGB(120, 80, 255),
-    ToggleOff        = Color3.fromRGB(60, 60, 85),
+    ToggleOff        = Color3.fromRGB(55, 55, 80),
     SliderFill       = Color3.fromRGB(120, 80, 255),
-    SliderTrack      = Color3.fromRGB(40, 40, 65),
+    SliderTrack      = Color3.fromRGB(35, 35, 60),
 
     -- Kenar
-    BorderGlass      = Color3.fromRGB(255, 255, 255),    -- Beyaz cam kenar
-    BorderSubtle     = Color3.fromRGB(80, 80, 120),      -- İnce kenar
+    BorderGlass      = Color3.fromRGB(255, 255, 255),
+    BorderSubtle     = Color3.fromRGB(70, 75, 110),
 }
 
 local P = GlassEngine.Palette
 
 -- ==========================================
--- TRANSPARENCY DEĞERLERİ
--- ==========================================
-
-GlassEngine.Alpha = {
-    GlassBackground  = 0.25,   -- Ana arka plan camı
-    GlassSurface     = 0.35,   -- Kart yüzeyi
-    GlassElevated    = 0.30,   -- Yükseltilmiş kartlar
-    GlassInput       = 0.45,   -- Input alanları
-    GlassTopBar      = 0.20,   -- Üst bar (daha opak)
-    GlassSideBar     = 0.22,   -- Yan panel
-    FrostOverlay     = 0.88,   -- Frost katmanı (çok saydam)
-    BorderGlow       = 0.55,   -- Kenar parlaması
-    InnerGlow        = 0.80,   -- İç glow
-    RefractionEdge   = 0.70,   -- Kırılma kenarı
-}
-
-local A = GlassEngine.Alpha
-
--- ==========================================
--- TWEEN YARDIMCISI
+-- TWEEN
 -- ==========================================
 
 function GlassEngine.tween(obj, props, duration, style, dir)
+    if not obj or not obj.Parent then return end
     local t = TweenService:Create(
         obj,
-        TweenInfo.new(
-            duration or 0.3,
-            style or Enum.EasingStyle.Quart,
-            dir or Enum.EasingDirection.Out
-        ),
+        TweenInfo.new(duration or 0.3, style or Enum.EasingStyle.Quart, dir or Enum.EasingDirection.Out),
         props
     )
     t:Play()
@@ -99,30 +76,20 @@ function GlassEngine.tween(obj, props, duration, style, dir)
 end
 
 -- ==========================================
--- LIQUID GLASS FRAME OLUŞTURUCU
+-- LIQUID GLASS PANEL
 -- ==========================================
---[[
-    iOS 26 Liquid Glass efekti katmanları:
-    
-    1. Ana arka plan (düşük opaklık, koyu renk)
-    2. Frost overlay (beyazımsı, çok saydam)
-    3. Üst kenar highlight (ışık kırılması)
-    4. Alt kenar shadow (derinlik)
-    5. İç glow gradient (merkeze doğru aydınlanma)
-    6. Kenarlık (ince beyaz, saydam)
-]]
 
 function GlassEngine.createGlassPanel(parent, config)
     config = config or {}
     local size = config.Size or UDim2.new(1, 0, 1, 0)
     local position = config.Position or UDim2.new(0, 0, 0, 0)
-    local cornerRadius = config.Corner or 14
+    local corner = config.Corner or 14
     local bgColor = config.Color or P.GlassPrimary
-    local bgAlpha = config.Transparency or A.GlassSurface
+    local bgTransparency = config.Transparency or 0.35
     local name = config.Name or "GlassPanel"
     local zindex = config.ZIndex or 1
 
-    -- Ana container
+    -- Container
     local container = Instance.new("Frame")
     container.Name = name
     container.Size = size
@@ -132,249 +99,200 @@ function GlassEngine.createGlassPanel(parent, config)
     container.ZIndex = zindex
     container.Parent = parent
 
-    -- KATMAN 1: Ana cam arka plan
+    -- KATMAN 1: Ana cam (koyu, yari saydam)
     local glassBG = Instance.new("Frame")
     glassBG.Name = "GlassBG"
     glassBG.Size = UDim2.new(1, 0, 1, 0)
     glassBG.BackgroundColor3 = bgColor
-    glassBG.BackgroundTransparency = bgAlpha
+    glassBG.BackgroundTransparency = bgTransparency
     glassBG.BorderSizePixel = 0
     glassBG.ZIndex = zindex
     glassBG.Parent = container
 
     local bgCorner = Instance.new("UICorner")
-    bgCorner.CornerRadius = UDim.new(0, cornerRadius)
+    bgCorner.CornerRadius = UDim.new(0, corner)
     bgCorner.Parent = glassBG
 
-    -- KATMAN 2: Frost overlay (üstten gelen ışık simülasyonu)
-    local frostOverlay = Instance.new("Frame")
-    frostOverlay.Name = "FrostOverlay"
-    frostOverlay.Size = UDim2.new(1, -2, 0.5, 0)
-    frostOverlay.Position = UDim2.new(0, 1, 0, 1)
-    frostOverlay.BackgroundColor3 = P.FrostLight
-    frostOverlay.BackgroundTransparency = A.FrostOverlay
-    frostOverlay.BorderSizePixel = 0
-    frostOverlay.ZIndex = zindex + 1
-    frostOverlay.Parent = container
+    -- KATMAN 2: Frost overlay (ustten gelen isik - GUCLU)
+    local frost1 = Instance.new("Frame")
+    frost1.Name = "Frost1"
+    frost1.Size = UDim2.new(1, 0, 1, 0)
+    frost1.BackgroundColor3 = P.FrostWhite
+    frost1.BackgroundTransparency = 0.92
+    frost1.BorderSizePixel = 0
+    frost1.ZIndex = zindex + 1
+    frost1.Parent = container
 
-    local frostCorner = Instance.new("UICorner")
-    frostCorner.CornerRadius = UDim.new(0, cornerRadius)
-    frostCorner.Parent = frostOverlay
+    local f1Corner = Instance.new("UICorner")
+    f1Corner.CornerRadius = UDim.new(0, corner)
+    f1Corner.Parent = frost1
 
-    -- Frost gradient (yukarıdan aşağı fade)
-    local frostGradient = Instance.new("UIGradient")
-    frostGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255)),
-    })
-    frostGradient.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.7),
-        NumberSequenceKeypoint.new(0.4, 0.92),
+    -- Frost gradient (ustten asagi erir)
+    local f1Grad = Instance.new("UIGradient")
+    f1Grad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.55),
+        NumberSequenceKeypoint.new(0.15, 0.75),
+        NumberSequenceKeypoint.new(0.5, 0.92),
         NumberSequenceKeypoint.new(1, 1),
     })
-    frostGradient.Rotation = 90
-    frostGradient.Parent = frostOverlay
+    f1Grad.Rotation = 90
+    f1Grad.Parent = frost1
 
-    -- KATMAN 3: Üst kenar highlight (ışık kırılması çizgisi)
-    local topHighlight = Instance.new("Frame")
-    topHighlight.Name = "TopHighlight"
-    topHighlight.Size = UDim2.new(1, -cornerRadius * 2, 0, 1)
-    topHighlight.Position = UDim2.new(0, cornerRadius, 0, 0)
-    topHighlight.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    topHighlight.BackgroundTransparency = A.RefractionEdge
-    topHighlight.BorderSizePixel = 0
-    topHighlight.ZIndex = zindex + 2
-    topHighlight.Parent = container
+    -- KATMAN 3: Renk kirilma katmani (mor-mavi shift)
+    local frost2 = Instance.new("Frame")
+    frost2.Name = "Frost2"
+    frost2.Size = UDim2.new(1, 0, 1, 0)
+    frost2.BackgroundTransparency = 0.94
+    frost2.BorderSizePixel = 0
+    frost2.ZIndex = zindex + 1
+    frost2.Parent = container
 
-    -- KATMAN 4: Cam kenarlık (ince, beyaz, saydam)
+    local f2Corner = Instance.new("UICorner")
+    f2Corner.CornerRadius = UDim.new(0, corner)
+    f2Corner.Parent = frost2
+
+    local f2Grad = Instance.new("UIGradient")
+    f2Grad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, P.AccentCyan),
+        ColorSequenceKeypoint.new(0.5, P.AccentPrimary),
+        ColorSequenceKeypoint.new(1, P.AccentPink),
+    })
+    f2Grad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.85),
+        NumberSequenceKeypoint.new(0.5, 0.95),
+        NumberSequenceKeypoint.new(1, 0.85),
+    })
+    f2Grad.Rotation = 135
+    f2Grad.Parent = frost2
+
+    -- KATMAN 4: Ust kenar specular highlight (parlak cizgi)
+    local specular = Instance.new("Frame")
+    specular.Name = "Specular"
+    specular.Size = UDim2.new(1, -(corner * 2), 0, 1)
+    specular.Position = UDim2.new(0, corner, 0, 0)
+    specular.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    specular.BackgroundTransparency = 0.5
+    specular.BorderSizePixel = 0
+    specular.ZIndex = zindex + 2
+    specular.Parent = container
+
+    -- Specular gradient (ortasi parlak, kenarlari solar)
+    local specGrad = Instance.new("UIGradient")
+    specGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(0.3, 0.4),
+        NumberSequenceKeypoint.new(0.5, 0.2),
+        NumberSequenceKeypoint.new(0.7, 0.4),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    specGrad.Parent = specular
+
+    -- KATMAN 5: Cam kenarlik (beyaz, saydam)
     local glassStroke = Instance.new("UIStroke")
     glassStroke.Color = P.BorderGlass
     glassStroke.Thickness = 1
-    glassStroke.Transparency = A.BorderGlow
+    glassStroke.Transparency = 0.6
     glassStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     glassStroke.Parent = glassBG
 
-    -- KATMAN 5: İç kenar glow (gradient)
-    local innerGlow = Instance.new("Frame")
-    innerGlow.Name = "InnerGlow"
-    innerGlow.Size = UDim2.new(1, 0, 1, 0)
-    innerGlow.BackgroundTransparency = 1
-    innerGlow.BorderSizePixel = 0
-    innerGlow.ZIndex = zindex + 1
-    innerGlow.Parent = container
-
-    local innerGlowCorner = Instance.new("UICorner")
-    innerGlowCorner.CornerRadius = UDim.new(0, cornerRadius)
-    innerGlowCorner.Parent = innerGlow
-
-    -- İç kenar stroke (accent rengiyle hafif glow)
+    -- KATMAN 6: Accent glow kenarlik (opsiyonel)
+    local accentStroke = nil
     if config.AccentGlow then
-        local accentStroke = Instance.new("UIStroke")
-        accentStroke.Color = config.AccentGlow or P.AccentPrimary
+        local innerFrame = Instance.new("Frame")
+        innerFrame.Size = UDim2.new(1, 0, 1, 0)
+        innerFrame.BackgroundTransparency = 1
+        innerFrame.BorderSizePixel = 0
+        innerFrame.ZIndex = zindex
+        innerFrame.Parent = container
+
+        local ifCorner = Instance.new("UICorner")
+        ifCorner.CornerRadius = UDim.new(0, corner)
+        ifCorner.Parent = innerFrame
+
+        accentStroke = Instance.new("UIStroke")
+        accentStroke.Color = config.AccentGlow
         accentStroke.Thickness = 1
-        accentStroke.Transparency = 0.75
+        accentStroke.Transparency = 0.7
         accentStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-        accentStroke.Parent = innerGlow
+        accentStroke.Parent = innerFrame
     end
 
-    -- Return: container + erişilebilir katmanlar
     return {
         Container = container,
         Background = glassBG,
-        Frost = frostOverlay,
-        Highlight = topHighlight,
+        Frost1 = frost1,
+        Frost2 = frost2,
+        Specular = specular,
         Stroke = glassStroke,
-        InnerGlow = innerGlow,
+        AccentStroke = accentStroke,
     }
 end
 
 -- ==========================================
--- GLASS BUTON
+-- REFRACTION ANİMASYONU (Hareket eden isik)
 -- ==========================================
 
-function GlassEngine.createGlassButton(parent, config)
+function GlassEngine.addRefractionAnimation(parentFrame, config)
     config = config or {}
-    local size = config.Size or UDim2.new(0, 100, 0, 36)
-    local position = config.Position or UDim2.new(0, 0, 0, 0)
-    local text = config.Text or "Button"
-    local cornerRadius = config.Corner or 10
-    local zindex = config.ZIndex or 5
+    local speed = config.Speed or 10
 
-    local btn = Instance.new("TextButton")
-    btn.Name = config.Name or "GlassBtn"
-    btn.Size = size
-    btn.Position = position
-    btn.BackgroundColor3 = P.GlassElevated
-    btn.BackgroundTransparency = A.GlassElevated
-    btn.Text = text
-    btn.TextColor3 = P.TextPrimary
-    btn.TextSize = config.TextSize or 13
-    btn.Font = Enum.Font.GothamSemibold
-    btn.BorderSizePixel = 0
-    btn.AutoButtonColor = false
-    btn.ZIndex = zindex
-    btn.Parent = parent
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, cornerRadius)
-    corner.Parent = btn
-
-    -- Cam kenarlık
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = P.BorderGlass
-    stroke.Thickness = 1
-    stroke.Transparency = 0.65
-    stroke.Parent = btn
-
-    -- Frost overlay
-    local frost = Instance.new("Frame")
-    frost.Size = UDim2.new(1, -2, 0.5, 0)
-    frost.Position = UDim2.new(0, 1, 0, 1)
-    frost.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    frost.BackgroundTransparency = 0.92
-    frost.BorderSizePixel = 0
-    frost.ZIndex = zindex + 1
-    frost.Parent = btn
-
-    local fCorner = Instance.new("UICorner")
-    fCorner.CornerRadius = UDim.new(0, cornerRadius)
-    fCorner.Parent = frost
-
-    local fGrad = Instance.new("UIGradient")
-    fGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.75),
-        NumberSequenceKeypoint.new(0.5, 0.93),
-        NumberSequenceKeypoint.new(1, 1),
-    })
-    fGrad.Rotation = 90
-    fGrad.Parent = frost
-
-    -- Hover efektleri
-    btn.MouseEnter:Connect(function()
-        GlassEngine.tween(btn, {BackgroundTransparency = A.GlassElevated - 0.12}, 0.15)
-        GlassEngine.tween(stroke, {Transparency = 0.45, Color = P.AccentSecondary}, 0.15)
-    end)
-
-    btn.MouseLeave:Connect(function()
-        GlassEngine.tween(btn, {BackgroundTransparency = A.GlassElevated}, 0.2)
-        GlassEngine.tween(stroke, {Transparency = 0.65, Color = P.BorderGlass}, 0.2)
-    end)
-
-    return btn
-end
-
--- ==========================================
--- GLASS SEPARATOR (İnce cam çizgi)
--- ==========================================
-
-function GlassEngine.createSeparator(parent, config)
-    config = config or {}
-
-    local sep = Instance.new("Frame")
-    sep.Size = config.Size or UDim2.new(1, -20, 0, 1)
-    sep.Position = config.Position or UDim2.new(0, 10, 0, 0)
-    sep.BackgroundColor3 = P.BorderGlass
-    sep.BackgroundTransparency = 0.8
-    sep.BorderSizePixel = 0
-    sep.Parent = parent
-
-    local grad = Instance.new("UIGradient")
-    grad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 1),
-        NumberSequenceKeypoint.new(0.2, 0.7),
-        NumberSequenceKeypoint.new(0.8, 0.7),
-        NumberSequenceKeypoint.new(1, 1),
-    })
-    grad.Parent = sep
-
-    return sep
-end
-
--- ==========================================
--- REFRACTION ANİMASYONU
--- ==========================================
--- Cam yüzeyinde yavaşça hareket eden ışık kırılması
-
-function GlassEngine.addRefractionAnimation(frame, config)
-    config = config or {}
-    local speed = config.Speed or 8
-    local color1 = config.Color1 or P.AccentCyan
-    local color2 = config.Color2 or P.AccentPink
-
-    -- Gradient overlay
+    -- Refraction frame'i parentFrame'in icinde
     local refraction = Instance.new("Frame")
     refraction.Name = "Refraction"
     refraction.Size = UDim2.new(1, 0, 1, 0)
-    refraction.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    refraction.BackgroundTransparency = 0.94
+    refraction.BackgroundTransparency = 1
     refraction.BorderSizePixel = 0
-    refraction.ZIndex = frame.ZIndex + 1
-    refraction.Parent = frame
+    refraction.ZIndex = parentFrame.ZIndex + 1
+    refraction.ClipsDescendants = true
+    refraction.Parent = parentFrame
 
     local rCorner = Instance.new("UICorner")
     rCorner.CornerRadius = UDim.new(0, 14)
     rCorner.Parent = refraction
 
-    local rGrad = Instance.new("UIGradient")
-    rGrad.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, color1),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(1, color2),
-    })
-    rGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.85),
-        NumberSequenceKeypoint.new(0.5, 0.97),
-        NumberSequenceKeypoint.new(1, 0.85),
-    })
-    rGrad.Rotation = 0
-    rGrad.Parent = refraction
+    -- Hareket eden isik noktasi
+    local lightOrb = Instance.new("Frame")
+    lightOrb.Size = UDim2.new(0.6, 0, 0.4, 0)
+    lightOrb.Position = UDim2.new(-0.3, 0, -0.2, 0)
+    lightOrb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    lightOrb.BackgroundTransparency = 0.92
+    lightOrb.BorderSizePixel = 0
+    lightOrb.ZIndex = parentFrame.ZIndex + 1
+    lightOrb.Parent = refraction
 
-    -- Yavaş dönme animasyonu
+    local orbCorner = Instance.new("UICorner")
+    orbCorner.CornerRadius = UDim.new(1, 0)
+    orbCorner.Parent = lightOrb
+
+    -- Orb gradient
+    local orbGrad = Instance.new("UIGradient")
+    orbGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, config.Color1 or P.AccentCyan),
+        ColorSequenceKeypoint.new(1, config.Color2 or P.AccentPink),
+    })
+    orbGrad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 0.85),
+        NumberSequenceKeypoint.new(0.5, 0.92),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    orbGrad.Parent = lightOrb
+
+    -- Hareket animasyonu (sonsuz dongu)
     task.spawn(function()
-        while refraction and refraction.Parent do
-            GlassEngine.tween(rGrad, {Rotation = 360}, speed, Enum.EasingStyle.Linear)
-            task.wait(speed)
-            rGrad.Rotation = 0
+        while lightOrb and lightOrb.Parent do
+            -- Sol usttten sag alta
+            GlassEngine.tween(lightOrb, {
+                Position = UDim2.new(0.7, 0, 0.6, 0)
+            }, speed * 0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+            task.wait(speed * 0.5)
+
+            if not lightOrb or not lightOrb.Parent then break end
+
+            -- Sag alttan sol uste
+            GlassEngine.tween(lightOrb, {
+                Position = UDim2.new(-0.3, 0, -0.2, 0)
+            }, speed * 0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+            task.wait(speed * 0.5)
         end
     end)
 
@@ -382,13 +300,12 @@ function GlassEngine.addRefractionAnimation(frame, config)
 end
 
 -- ==========================================
--- DEPTH SHADOW (Cam altı gölge)
+-- DEPTH SHADOW
 -- ==========================================
 
 function GlassEngine.addDepthShadow(frame, config)
     config = config or {}
-    local offset = config.Offset or 6
-    local transparency = config.Transparency or 0.6
+    local offset = config.Offset or 8
 
     local shadow = Instance.new("ImageLabel")
     shadow.Name = "DepthShadow"
@@ -398,7 +315,7 @@ function GlassEngine.addDepthShadow(frame, config)
     shadow.ZIndex = frame.ZIndex - 1
     shadow.Image = "rbxassetid://6014261993"
     shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
-    shadow.ImageTransparency = transparency
+    shadow.ImageTransparency = config.Transparency or 0.5
     shadow.ScaleType = Enum.ScaleType.Slice
     shadow.SliceCenter = Rect.new(49, 49, 450, 450)
     shadow.Parent = frame
@@ -406,8 +323,35 @@ function GlassEngine.addDepthShadow(frame, config)
     return shadow
 end
 
--- Global erişim
+-- ==========================================
+-- CAM SEPARATOR
+-- ==========================================
+
+function GlassEngine.createSeparator(parent, config)
+    config = config or {}
+
+    local sep = Instance.new("Frame")
+    sep.Size = config.Size or UDim2.new(1, -20, 0, 1)
+    sep.Position = config.Position or UDim2.new(0, 10, 0, 0)
+    sep.BackgroundColor3 = P.BorderGlass
+    sep.BackgroundTransparency = 0.75
+    sep.BorderSizePixel = 0
+    sep.Parent = parent
+
+    local grad = Instance.new("UIGradient")
+    grad.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(0.2, 0.6),
+        NumberSequenceKeypoint.new(0.8, 0.6),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    grad.Parent = sep
+
+    return sep
+end
+
+-- Global erisim
 getgenv().VergiHub.GlassEngine = GlassEngine
 
-print("[VergiHub] Liquid Glass Engine v1.0 hazir!")
+print("[VergiHub] Liquid Glass Engine v2.0 hazir!")
 return GlassEngine
